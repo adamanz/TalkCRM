@@ -1,45 +1,293 @@
 {
     "name": "TalkCRM",
     "conversation_config": {
-        "agent": {
-            "prompt": {
-                "prompt": "You are TalkCRM, a voice assistant for sales representatives to interact with their Salesforce CRM hands-free.\n\n## Your Tools\nYou have these Salesforce tools:\n- **search_salesforce**: Find accounts, contacts, opportunities, leads by name or keyword\n- **get_record**: Get full details of a specific record by ID\n- **create_record**: Create new accounts, contacts, leads, tasks, opportunities\n- **update_record**: Update existing records (change stage, status, amounts, etc.)\n- **log_call**: Log a call activity to Salesforce\n- **get_my_tasks**: Get your open tasks and to-dos\n- **get_my_pipeline**: Get your opportunities and pipeline summary\n\n## Guidelines\n- Be concise - you're on a phone call, not writing an essay\n- After searching, summarize results verbally (don't read IDs)\n- For updates, confirm the action before executing\n- If a search returns multiple results, ask which one they mean\n- Speak naturally, like a helpful assistant\n\n## Common Flows\n\n**\"What's in my pipeline?\"**\n→ Use get_my_pipeline, summarize total value and key deals\n\n**\"Find Acme\" or \"Look up John Smith\"**\n→ Use search_salesforce with the name\n→ Summarize: \"I found Acme Corp, they have a $50k deal in Negotiation stage\"\n\n**\"Update Acme deal to Closed Won\"**\n→ First search to get the record ID\n→ Confirm: \"I'll mark the Acme deal as Closed Won, is that right?\"\n→ Use update_record with the ID\n\n**\"Create a task to call John tomorrow\"**\n→ Use create_record with objectType Task\n→ Confirm creation\n\n**\"Log this call\"**\n→ Ask what account/contact to log it against if not clear\n→ Use log_call\n\n## Error Handling\n- If search finds nothing: \"I couldn't find any records matching that. Could you try a different name?\"\n- If update fails: \"I wasn't able to update that record. Let me try again.\"\n- Never make up data - only report what the tools return",
-                "llm": "claude-3-5-sonnet",
-                "temperature": 0.3,
-                "tools": []
-            },
-            "first_message": "Hey! I'm TalkCRM. I can check your pipeline, find accounts, update deals, or create tasks. What do you need?",
-            "language": "en"
+        "asr": {
+            "quality": "high",
+            "provider": "elevenlabs",
+            "user_input_audio_format": "pcm_16000",
+            "keywords": []
         },
-        "conversation": {
-            "text_only": false
+        "turn": {
+            "turn_timeout": 10,
+            "initial_wait_time": null,
+            "silence_end_call_timeout": -1,
+            "soft_timeout_config": {
+                "timeout_seconds": -1,
+                "message": "Hhmmmm...yeah give me a second..."
+            },
+            "mode": "turn",
+            "turn_eagerness": "normal"
         },
         "tts": {
             "model_id": "eleven_turbo_v2",
             "voice_id": "21m00Tcm4TlvDq8ikWAM",
+            "supported_voices": [],
+            "suggested_audio_tags": [],
+            "agent_output_audio_format": "pcm_16000",
+            "optimize_streaming_latency": 3,
             "stability": 0.5,
-            "similarity_boost": 0.75
+            "speed": 1,
+            "similarity_boost": 0.75,
+            "text_normalisation_type": "system_prompt",
+            "pronunciation_dictionary_locators": []
         },
-        "stt": {
-            "model": "scribe_v1"
+        "conversation": {
+            "text_only": false,
+            "max_duration_seconds": 600,
+            "client_events": [
+                "audio",
+                "interruption",
+                "agent_response",
+                "user_transcript",
+                "agent_response_correction",
+                "agent_tool_response"
+            ]
         },
-        "turn": {
-            "turn_timeout": 10
+        "language_presets": {},
+        "vad": {
+            "background_voice_detection": false
+        },
+        "agent": {
+            "first_message": "Hey! I'm TalkCRM. I can check your pipeline, find accounts, update deals, or create tasks. What do you need?",
+            "language": "en",
+            "dynamic_variables": {
+                "dynamic_variable_placeholders": {}
+            },
+            "disable_first_message_interruptions": false,
+            "prompt": {
+                "prompt": "You are TalkCRM, a voice assistant for sales representatives to interact with their Salesforce CRM hands-free.\n\n## Your Tools\nYou have these Salesforce tools:\n- **search_salesforce**: Find accounts, contacts, opportunities, leads by name or keyword\n- **get_record**: Get full details of a specific record by ID\n- **create_record**: Create new accounts, contacts, leads, tasks, opportunities\n- **update_record**: Update existing records (change stage, status, amounts, etc.)\n- **log_call**: Log a call activity to Salesforce\n- **get_my_tasks**: Get your open tasks and to-dos\n- **get_my_pipeline**: Get your opportunities and pipeline summary\n\n## Guidelines\n- Be concise - you're on a phone call, not writing an essay\n- After searching, summarize results verbally (don't read IDs)\n- For updates, confirm the action before executing\n- If a search returns multiple results, ask which one they mean\n- Speak naturally, like a helpful assistant\n\n## Common Flows\n\n**\"What's in my pipeline?\"**\n→ Use get_my_pipeline, summarize total value and key deals\n\n**\"Find Acme\" or \"Look up John Smith\"**\n→ Use search_salesforce with the name\n→ Summarize: \"I found Acme Corp, they have a $50k deal in Negotiation stage\"\n\n**\"Update Acme deal to Closed Won\"**\n→ First search to get the record ID\n→ Confirm: \"I'll mark the Acme deal as Closed Won, is that right?\"\n→ Use update_record with the ID\n\n**\"Create a task to call John tomorrow\"**\n→ Use create_record with objectType Task\n→ Confirm creation\n\n**\"Log this call\"**\n→ Ask what account/contact to log it against if not clear\n→ Use log_call\n\n## Error Handling\n- If search finds nothing: \"I couldn't find any records matching that. Could you try a different name?\"\n- If update fails: \"I wasn't able to update that record. Let me try again.\"\n- Never make up data - only report what the tools return",
+                "llm": "claude-3-5-sonnet",
+                "temperature": 0.3,
+                "max_tokens": -1,
+                "built_in_tools": {},
+                "mcp_server_ids": [],
+                "native_mcp_server_ids": [],
+                "knowledge_base": [],
+                "ignore_default_personality": false,
+                "rag": {
+                    "enabled": false,
+                    "embedding_model": "e5_mistral_7b_instruct",
+                    "max_vector_distance": 0.6,
+                    "max_documents_length": 50000,
+                    "max_retrieved_rag_chunks_count": 20,
+                    "query_rewrite_prompt_override": null
+                },
+                "backup_llm_config": {
+                    "preference": "default"
+                },
+                "tools": [
+                    {
+                        "type": "webhook",
+                        "name": "salesforce_assistant",
+                        "description": "Your intelligent Salesforce assistant. Use this tool for ANY request about Salesforce data - searching records, viewing pipeline, creating tasks, updating deals, logging calls, or any CRM question. Just pass the user's natural language request and the assistant will figure out what to do.",
+                        "response_timeout_secs": 30,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "assignments": [],
+                        "tool_call_sound": null,
+                        "tool_call_sound_behavior": "auto",
+                        "dynamic_variables": {
+                            "dynamic_variable_placeholders": {}
+                        },
+                        "execution_mode": "immediate",
+                        "api_schema": {
+                            "request_headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "url": "https://gregarious-crocodile-506.convex.site/tools/assistant",
+                            "method": "POST",
+                            "path_params_schema": {},
+                            "request_body_schema": {
+                                "type": "object",
+                                "required": [
+                                    "message"
+                                ],
+                                "description": "Send the user's natural language request to the Salesforce AI assistant",
+                                "properties": {
+                                    "message": {
+                                        "type": "string",
+                                        "description": "The user's request in natural language. Examples: 'Show me my pipeline', 'Find the Acme account', 'Update the Acme deal to Closed Won', 'Create a task to call John tomorrow', 'Log this call'.",
+                                        "is_system_provided": false,
+                                        "dynamic_variable": "",
+                                        "constant_value": ""
+                                    }
+                                }
+                            },
+                            "content_type": "application/json"
+                        }
+                    }
+                ]
+            }
         }
     },
     "platform_settings": {
+        "evaluation": {
+            "criteria": []
+        },
+        "widget": {
+            "variant": "full",
+            "placement": "bottom-right",
+            "expandable": "never",
+            "avatar": {
+                "type": "orb",
+                "color1": "#2792dc",
+                "color2": "#9ce6e6"
+            },
+            "feedback_mode": "none",
+            "end_feedback": {
+                "type": "rating"
+            },
+            "bg_color": "#ffffff",
+            "text_color": "#000000",
+            "btn_color": "#000000",
+            "btn_text_color": "#ffffff",
+            "border_color": "#e1e1e1",
+            "focus_color": "#000000",
+            "shareable_page_show_terms": true,
+            "show_avatar_when_collapsed": false,
+            "disable_banner": false,
+            "mic_muting_enabled": false,
+            "transcript_enabled": false,
+            "text_input_enabled": true,
+            "conversation_mode_toggle_enabled": false,
+            "default_expanded": false,
+            "always_expanded": false,
+            "text_contents": {
+                "initiate_feedback": null,
+                "request_follow_up_feedback": null,
+                "thanks_for_feedback": null,
+                "thanks_for_feedback_details": null,
+                "follow_up_feedback_placeholder": null,
+                "submit": null,
+                "go_back": null
+            },
+            "styles": {},
+            "language_selector": false,
+            "supports_text_only": true,
+            "language_presets": {}
+        },
+        "data_collection": {},
+        "overrides": {
+            "conversation_config_override": {
+                "turn": {
+                    "soft_timeout_config": {
+                        "message": false
+                    }
+                },
+                "tts": {
+                    "voice_id": false,
+                    "stability": false,
+                    "speed": false,
+                    "similarity_boost": false
+                },
+                "conversation": {
+                    "text_only": true
+                },
+                "agent": {
+                    "first_message": false,
+                    "language": false,
+                    "prompt": {
+                        "prompt": false,
+                        "llm": false,
+                        "native_mcp_server_ids": false
+                    }
+                }
+            },
+            "custom_llm_extra_body": false,
+            "enable_conversation_initiation_client_data_from_webhook": false
+        },
+        "workspace_overrides": {
+            "webhooks": {
+                "events": [
+                    "transcript"
+                ],
+                "send_audio": false
+            }
+        },
+        "testing": {
+            "attached_tests": [],
+            "referenced_tests_ids": []
+        },
+        "archived": false,
+        "guardrails": {
+            "version": "1",
+            "moderation": {
+                "config": {
+                    "sexual": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "violence": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "violence_graphic": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "harassment": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "harassment_threatening": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "hate": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "hate_threatening": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm_instructions": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm_intent": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "sexual_minors": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    }
+                }
+            }
+        },
         "auth": {
-            "enable_auth": false
+            "enable_auth": false,
+            "allowlist": []
+        },
+        "call_limits": {
+            "agent_concurrency_limit": -1,
+            "daily_limit": 100000,
+            "bursting_enabled": true
+        },
+        "ban": null,
+        "privacy": {
+            "record_voice": true,
+            "retention_days": -1,
+            "delete_transcript_and_pii": false,
+            "delete_audio": false,
+            "apply_to_existing_conversations": false,
+            "zero_retention_mode": false
+        },
+        "safety": {
+            "is_blocked_ivc": false,
+            "is_blocked_non_ivc": false,
+            "ignore_safety_evaluation": false
         }
     },
-    "tags": ["salesforce", "crm", "voice-assistant", "hackathon"],
-    "tools": [
-        "tool_3001kc80s35dfdmt55k3qf4t4hce",
-        "tool_0501kc80swvgfm6s4f5n9asjnbkb",
-        "tool_0101kc80sznde6z87xfdv7q8n003",
-        "tool_3401kc80t1pgfr9vmtb87d0k4se1",
-        "tool_1601kc80t3zbfx0ah1834fzr6jfp",
-        "tool_9301kc80t6gye70vbq5fm5g0sahb",
-        "tool_3301kc80t8cqe158ahxtvsx0yn6e"
+    "tags": [
+        "salesforce",
+        "crm",
+        "voice-assistant",
+        "hackathon"
     ]
 }

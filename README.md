@@ -137,6 +137,8 @@ elevenlabs agents push
 
 ### 4. Configure Twilio
 
+**Demo Phone Number:** +1 (646) 600-5041
+
 Set your Twilio phone number webhook to point to ElevenLabs:
 - Connect directly to ElevenLabs Conversational AI WebSocket
 - Agent ID: `agent_0701kc80pzcvfnytxrbeaezmy4tg`

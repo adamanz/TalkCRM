@@ -23,5 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Hackathon strategy (private)
-how-to-win.md
+# Pulled configs (not needed in repo)
+tool_configs_pulled/

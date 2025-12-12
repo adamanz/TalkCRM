@@ -36,16 +36,6 @@
             "id": "tool_3301kc80t8cqe158ahxtvsx0yn6e"
         },
         {
-            "type": "api_integration_webhook",
-            "config": "/Users/adamanz/TalkCRM/tool_configs_pulled/exa_search-1.json",
-            "id": "tool_2801kc2gt1ngfv4r2ayd4mjm5nq8"
-        },
-        {
-            "type": "api_integration_webhook",
-            "config": "/Users/adamanz/TalkCRM/tool_configs_pulled/exa_search-2.json",
-            "id": "tool_2801kc2gt1ngfv4r2ayd4mjm5nq8"
-        },
-        {
             "type": "webhook",
             "config": "tool_configs/salesforce_assistant.json",
             "id": "tool_8601kc83dphpfta8dyxbg9me2b68"
