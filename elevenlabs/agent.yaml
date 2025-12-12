@@ -1,0 +1,272 @@
+# TalkCRM - Voice-Powered Salesforce Agent
+# Deploy with: elevenlabs agents push
+
+name: TalkCRM Sales Assistant
+description: Voice agent for sales reps to interact with Salesforce CRM via phone
+
+conversation_config:
+  agent:
+    prompt:
+      prompt: |
+        You are TalkCRM, a helpful voice assistant for sales representatives.
+        You help them interact with their Salesforce CRM data using natural conversation.
+
+        ## Your Capabilities
+        - Search for accounts, contacts, opportunities, leads, and cases
+        - Get details about specific records
+        - Create new tasks, events, notes, and log calls
+        - Update existing records (opportunity stages, contact info, etc.)
+        - Summarize pipeline and tasks
+
+        ## Guidelines
+        1. Be concise - you're on a phone call, not writing an essay
+        2. Confirm before making changes: "I'll update the Acme opportunity to Closed Won. Is that correct?"
+        3. Read back important details: "Found 3 accounts matching 'Acme': Acme Corp, Acme Industries, and Acme Solutions."
+        4. If search returns many results, summarize and ask for clarification
+        5. Always confirm record names before updates to avoid mistakes
+        6. When creating records, confirm the key fields before saving
+        7. For amounts, read them naturally: "$50,000" not "50000 dollars"
+        8. Use natural date references: "next Tuesday" instead of "2024-01-15"
+
+        ## Common Phrases to Recognize
+        - "Show me my pipeline" → get_my_pipeline tool
+        - "What tasks do I have" → get_my_tasks tool
+        - "Find [name]" or "Look up [name]" → search_salesforce tool
+        - "Tell me about [record]" → get_record tool
+        - "Create a task" → create_record with object_type=Task
+        - "Log this call" → log_call tool
+        - "Update [record]" → update_record tool
+
+        ## Error Handling
+        - If Salesforce returns an error, explain it simply: "I couldn't find that account. Could you spell the name?"
+        - If you're unsure what they want, ask for clarification
+        - Never make up data - only report what Salesforce returns
+
+      first_message: >
+        Hi! I'm your TalkCRM assistant. I can help you search your accounts,
+        check your pipeline, create tasks, and update records. What would you like to do?
+
+      tools:
+        # Search Salesforce records
+        - type: webhook
+          name: search_salesforce
+          description: >
+            Search for Salesforce records by name or keyword. Use this to find accounts,
+            contacts, opportunities, leads, or cases. Returns matching records with basic info.
+          webhook:
+            url: "{{CONVEX_URL}}/tools/search"
+            method: POST
+          parameters:
+            - name: query
+              type: string
+              description: The search term - account name, contact name, or keywords
+              required: true
+            - name: object_type
+              type: string
+              description: >
+                Type of record to search: Account, Contact, Opportunity, Lead, Case.
+                If not specified, searches all types.
+              required: false
+            - name: limit
+              type: number
+              description: Maximum number of results to return (default 10)
+              required: false
+
+        # Get specific record details
+        - type: webhook
+          name: get_record
+          description: >
+            Get detailed information about a specific Salesforce record by its ID.
+            Use this after searching to get full details.
+          webhook:
+            url: "{{CONVEX_URL}}/tools/get-record"
+            method: POST
+          parameters:
+            - name: record_id
+              type: string
+              description: The Salesforce record ID (18 character ID)
+              required: true
+            - name: object_type
+              type: string
+              description: The type of record (Account, Contact, Opportunity, etc.)
+              required: true
+
+        # Create new record
+        - type: webhook
+          name: create_record
+          description: >
+            Create a new Salesforce record. Most commonly used for Tasks, Events,
+            and Notes. Can also create Contacts, Opportunities, etc.
+          webhook:
+            url: "{{CONVEX_URL}}/tools/create-record"
+            method: POST
+          parameters:
+            - name: object_type
+              type: string
+              description: >
+                Type of record to create: Task, Event, Note, Contact, Lead, Opportunity, Case
+              required: true
+            - name: Subject
+              type: string
+              description: Subject/title of the record (for Tasks, Events)
+              required: false
+            - name: Name
+              type: string
+              description: Name field (for Accounts, Contacts)
+              required: false
+            - name: Description
+              type: string
+              description: Description or notes
+              required: false
+            - name: WhoId
+              type: string
+              description: Related Contact or Lead ID
+              required: false
+            - name: WhatId
+              type: string
+              description: Related Account or Opportunity ID
+              required: false
+            - name: ActivityDate
+              type: string
+              description: Due date for tasks (YYYY-MM-DD format)
+              required: false
+            - name: Priority
+              type: string
+              description: Priority level (High, Normal, Low)
+              required: false
+
+        # Update existing record
+        - type: webhook
+          name: update_record
+          description: >
+            Update an existing Salesforce record. Can modify fields like Stage,
+            Amount, Status, etc. Always confirm with the user before updating.
+          webhook:
+            url: "{{CONVEX_URL}}/tools/update-record"
+            method: POST
+          parameters:
+            - name: record_id
+              type: string
+              description: The Salesforce record ID to update
+              required: true
+            - name: object_type
+              type: string
+              description: Type of record (Account, Contact, Opportunity, etc.)
+              required: true
+            - name: StageName
+              type: string
+              description: Opportunity stage name
+              required: false
+            - name: Amount
+              type: number
+              description: Opportunity amount
+              required: false
+            - name: Status
+              type: string
+              description: Status field (for Cases, Tasks)
+              required: false
+            - name: Description
+              type: string
+              description: Description or notes
+              required: false
+
+        # Log call activity
+        - type: webhook
+          name: log_call
+          description: >
+            Log this phone call as an activity in Salesforce.
+            Creates a completed Task with CallType. Use when user says "log this call".
+          webhook:
+            url: "{{CONVEX_URL}}/tools/log-call"
+            method: POST
+          parameters:
+            - name: subject
+              type: string
+              description: Subject of the call activity
+              required: true
+            - name: contact_id
+              type: string
+              description: Contact ID to log the call against
+              required: false
+            - name: account_id
+              type: string
+              description: Account ID to log the call against
+              required: false
+            - name: description
+              type: string
+              description: Notes from the call
+              required: false
+            - name: duration_minutes
+              type: number
+              description: Duration of the call in minutes
+              required: false
+
+        # Get my tasks
+        - type: webhook
+          name: get_my_tasks
+          description: >
+            Get the current user's tasks from Salesforce.
+            Use when user asks "what tasks do I have" or "show me my tasks".
+          webhook:
+            url: "{{CONVEX_URL}}/tools/my-tasks"
+            method: POST
+          parameters:
+            - name: status
+              type: string
+              description: Filter by status - "open" for incomplete, "completed" for done
+              required: false
+            - name: due_date
+              type: string
+              description: Filter by due date - "today", "this_week", or "overdue"
+              required: false
+
+        # Get my pipeline/opportunities
+        - type: webhook
+          name: get_my_pipeline
+          description: >
+            Get the current user's sales pipeline (opportunities) from Salesforce.
+            Use when user asks about "my pipeline", "my deals", or "my opportunities".
+          webhook:
+            url: "{{CONVEX_URL}}/tools/my-pipeline"
+            method: POST
+          parameters:
+            - name: stage
+              type: string
+              description: Filter by stage - "open" for active deals, "won", or "lost"
+              required: false
+            - name: close_date
+              type: string
+              description: Filter by close date - "this_month", "this_quarter", "next_quarter"
+              required: false
+
+        # System tool: End call
+        - type: system
+          name: end_call
+          description: End the phone call when the user says goodbye or is done
+
+  tts:
+    voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel - professional female voice
+    model_id: eleven_turbo_v2_5
+    stability: 0.5
+    similarity_boost: 0.75
+    speed: 1.0
+
+  stt:
+    model: scribe_v1
+
+  turn:
+    mode: turn_based  # Wait for user to finish speaking
+    silence_threshold_ms: 1500  # 1.5 seconds of silence = turn complete
+
+platform_settings:
+  auth:
+    enable_auth: false  # Disable for demo mode
+
+  evaluation:
+    criteria:
+      - id: task_completion
+        name: Task Completion
+        description: Did the agent successfully complete the user's request?
+      - id: accuracy
+        name: Data Accuracy
+        description: Was the Salesforce data accurately retrieved and reported?
