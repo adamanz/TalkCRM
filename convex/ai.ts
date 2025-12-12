@@ -127,18 +127,9 @@ export const askSalesforce = action({
           };
 
         case "query":
-          if (interpretation.soql) {
-            const queryResults = await ctx.runAction(api.salesforce.searchRecords, {
-              query: interpretation.soql,
-            });
-            return {
-              response: formatQueryResponse(queryResults, interpretation.objectType),
-              data: queryResults,
-              action: "query",
-            };
-          }
-          // Handle special queries
-          if (interpretation.objectType === "Opportunity" || args.userMessage.toLowerCase().includes("pipeline")) {
+          // Handle special "my" queries FIRST - these need user context
+          const msgLower = args.userMessage.toLowerCase();
+          if (interpretation.objectType === "Opportunity" || msgLower.includes("pipeline") || msgLower.includes("my opportunit") || msgLower.includes("my deals")) {
             const oppResults = await ctx.runAction(api.salesforce.getMyOpportunities, {
               stage: "open",
             });
@@ -148,13 +139,24 @@ export const askSalesforce = action({
               action: "query",
             };
           }
-          if (interpretation.objectType === "Task" || args.userMessage.toLowerCase().includes("task")) {
+          if (interpretation.objectType === "Task" || msgLower.includes("my task") || msgLower.includes("my to-do") || msgLower.includes("my todo")) {
             const taskResults = await ctx.runAction(api.salesforce.getMyTasks, {
               status: "open",
             });
             return {
               response: formatTasks(taskResults.tasks),
               data: taskResults,
+              action: "query",
+            };
+          }
+          // For other SOQL queries (not user-specific)
+          if (interpretation.soql && !interpretation.soql.includes("CURRENT_USER")) {
+            const queryResults = await ctx.runAction(api.salesforce.searchRecords, {
+              query: interpretation.soql,
+            });
+            return {
+              response: formatQueryResponse(queryResults, interpretation.objectType),
+              data: queryResults,
               action: "query",
             };
           }
