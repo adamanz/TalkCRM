@@ -1,0 +1,33 @@
+{
+    "name": "get_my_tasks",
+    "description": "Get the current user's tasks from Salesforce. Use when user asks 'what tasks do I have', 'show me my tasks', or 'what's on my to-do list'.",
+    "type": "webhook",
+    "api_schema": {
+        "url": "https://gregarious-crocodile-506.convex.site/tools/my-tasks",
+        "method": "POST",
+        "request_body_schema": {
+            "type": "object",
+            "description": "Filter parameters for task retrieval",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status: 'open' for incomplete tasks, 'completed' for done tasks"
+                },
+                "due_date": {
+                    "type": "string",
+                    "description": "Filter by due date: 'today', 'this_week', or 'overdue'"
+                }
+            }
+        },
+        "request_headers": {
+            "Content-Type": "application/json"
+        }
+    },
+    "response_timeout_secs": 30,
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "assignments": [],
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true
+}

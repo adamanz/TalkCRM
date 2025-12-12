@@ -5,7 +5,73 @@ import { api, internal } from "./_generated/api";
 const http = httpRouter();
 
 // ============================================================================
-// ELEVENLABS SERVER TOOL ENDPOINTS
+// AI-POWERED SALESFORCE ASSISTANT (Primary Tool)
+// Single intelligent endpoint that interprets natural language using Claude
+// ============================================================================
+
+/**
+ * AI-powered Salesforce assistant
+ * This is the PRIMARY tool for ElevenLabs - handles all natural language requests
+ */
+http.route({
+  path: "/tools/assistant",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const startTime = Date.now();
+    try {
+      const body = await request.json();
+      console.log("AI assistant called with:", body);
+
+      // ElevenLabs sends the user's message
+      const userMessage = body.message || body.user_message || body.query || body.text || "";
+
+      if (!userMessage) {
+        return new Response(
+          JSON.stringify({
+            response: "I didn't catch that. Could you repeat your request?",
+            error: "No message provided"
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Call the AI-powered action
+      const result = await ctx.runAction(api.ai.askSalesforce, {
+        userMessage,
+        conversationHistory: body.conversation_history,
+      });
+
+      // Log the tool call
+      if (body.conversation_id) {
+        await ctx.runMutation(internal.conversations.logToolCall, {
+          conversationId: body.conversation_id,
+          toolName: "ai_assistant",
+          input: JSON.stringify({ message: userMessage }),
+          output: JSON.stringify(result),
+          success: true,
+          durationMs: Date.now() - startTime,
+        });
+      }
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("AI assistant error:", error);
+      return new Response(
+        JSON.stringify({
+          response: "I'm having trouble right now. Let me try again.",
+          error: error.message
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+// ============================================================================
+// ELEVENLABS SERVER TOOL ENDPOINTS (Legacy - specific tools)
 // These endpoints are called by ElevenLabs Conversational AI when the agent
 // decides to use a tool. Each tool corresponds to a Salesforce operation.
 // ============================================================================
@@ -71,7 +137,10 @@ http.route({
       const body = await request.json();
       console.log("get_record called with:", body);
 
-      const { record_id, object_type, fields } = body;
+      // Accept both camelCase (from ElevenLabs) and snake_case
+      const record_id = body.record_id || body.recordId;
+      const object_type = body.object_type || body.objectType;
+      const fields = body.fields;
 
       const result = await ctx.runAction(api.salesforce.getRecord, {
         recordId: record_id,
@@ -117,9 +186,9 @@ http.route({
       const body = await request.json();
       console.log("create_record called with:", body);
 
-      const { object_type, ...fields } = body;
-      // Remove metadata fields
-      delete fields.conversation_id;
+      // Accept both camelCase (from ElevenLabs) and snake_case
+      const object_type = body.object_type || body.objectType;
+      const { object_type: _ot, objectType: _ot2, conversation_id: _cid, ...fields } = body;
 
       const result = await ctx.runAction(api.salesforce.createRecord, {
         objectType: object_type,
@@ -164,8 +233,10 @@ http.route({
       const body = await request.json();
       console.log("update_record called with:", body);
 
-      const { record_id, object_type, ...fields } = body;
-      delete fields.conversation_id;
+      // Accept both camelCase (from ElevenLabs) and snake_case
+      const record_id = body.record_id || body.recordId;
+      const object_type = body.object_type || body.objectType;
+      const { record_id: _rid, recordId: _rid2, object_type: _ot, objectType: _ot2, conversation_id: _cid, ...fields } = body;
 
       const result = await ctx.runAction(api.salesforce.updateRecord, {
         recordId: record_id,
@@ -348,13 +419,38 @@ http.route({
       // Validate webhook signature (optional but recommended)
       // const signature = request.headers.get("elevenlabs-signature");
 
-      const { data } = body;
+      // ElevenLabs sends: { type, event_timestamp, data }
+      const data = body?.data ?? body?.data?.data ?? body?.data;
+      const conversationId: string | undefined = data?.conversation_id;
+      if (!conversationId) {
+        return new Response(JSON.stringify({ error: "Missing data.conversation_id" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Store transcript as a string in Convex for easy display + debugging.
+      const transcriptRaw = data?.transcript;
+      const transcript =
+        typeof transcriptRaw === "string" ? transcriptRaw : JSON.stringify(transcriptRaw ?? null);
+
+      const summary: string | undefined = data?.analysis?.transcript_summary;
+
+      const startTimeUnixSecs: number | undefined = data?.metadata?.start_time_unix_secs;
+      const callDurationSecs: number | undefined = data?.metadata?.call_duration_secs;
+      const startTime =
+        typeof startTimeUnixSecs === "number" ? startTimeUnixSecs * 1000 : undefined;
+      const endTime =
+        typeof startTimeUnixSecs === "number" && typeof callDurationSecs === "number"
+          ? (startTimeUnixSecs + callDurationSecs) * 1000
+          : Date.now();
 
       await ctx.runMutation(internal.conversations.completeConversation, {
-        conversationId: data.conversation_id,
-        transcript: data.transcript,
-        summary: data.analysis?.transcript_summary,
-        endTime: Date.now(),
+        conversationId,
+        transcript,
+        summary,
+        startTime,
+        endTime,
       });
 
       return new Response(JSON.stringify({ status: "received" }), {

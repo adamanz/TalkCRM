@@ -1,0 +1,122 @@
+{
+    "type": "webhook",
+    "name": "create_record",
+    "description": "Create a new record in Salesforce. Use this to create new accounts, contacts, leads, tasks, opportunities, or cases. For tasks, include the subject and due date. For leads, include name and company.",
+    "response_timeout_secs": 30,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "api_schema": {
+        "request_headers": {
+            "Content-Type": "application/json"
+        },
+        "url": "https://gregarious-crocodile-506.convex.site/tools/create-record",
+        "method": "POST",
+        "path_params_schema": {},
+        "request_body_schema": {
+            "type": "object",
+            "required": ["objectType"],
+            "description": "Parameters to create a new Salesforce record",
+            "properties": {
+                "objectType": {
+                    "type": "string",
+                    "description": "Type of record to create: Account, Contact, Opportunity, Lead, Task, or Case",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Name": {
+                    "type": "string",
+                    "description": "Name of the record (required for Account, Opportunity)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "FirstName": {
+                    "type": "string",
+                    "description": "First name (for Contact or Lead)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "LastName": {
+                    "type": "string",
+                    "description": "Last name (required for Contact or Lead)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Company": {
+                    "type": "string",
+                    "description": "Company name (required for Lead)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Email": {
+                    "type": "string",
+                    "description": "Email address",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Phone": {
+                    "type": "string",
+                    "description": "Phone number",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Subject": {
+                    "type": "string",
+                    "description": "Subject line (for Task)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "ActivityDate": {
+                    "type": "string",
+                    "description": "Due date for Task in YYYY-MM-DD format",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Description": {
+                    "type": "string",
+                    "description": "Description or notes for the record",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "StageName": {
+                    "type": "string",
+                    "description": "Stage name (for Opportunity): Prospecting, Qualification, Needs Analysis, Value Proposition, Negotiation, Closed Won, Closed Lost",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Amount": {
+                    "type": "number",
+                    "description": "Deal amount in dollars (for Opportunity)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "CloseDate": {
+                    "type": "string",
+                    "description": "Expected close date in YYYY-MM-DD format (for Opportunity)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            }
+        },
+        "content_type": "application/json"
+    }
+}

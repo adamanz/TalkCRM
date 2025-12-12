@@ -1,0 +1,52 @@
+{
+    "type": "webhook",
+    "name": "get_record",
+    "description": "Get detailed information about a specific Salesforce record by its ID. Use this when you have a record ID and need to see all the details like account info, contact details, opportunity amount and stage, etc.",
+    "response_timeout_secs": 30,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "api_schema": {
+        "request_headers": {
+            "Content-Type": "application/json"
+        },
+        "url": "https://gregarious-crocodile-506.convex.site/tools/get-record",
+        "method": "POST",
+        "path_params_schema": {},
+        "request_body_schema": {
+            "type": "object",
+            "required": ["recordId", "objectType"],
+            "description": "Parameters to retrieve a specific Salesforce record",
+            "properties": {
+                "recordId": {
+                    "type": "string",
+                    "description": "The Salesforce record ID (18-character ID)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "objectType": {
+                    "type": "string",
+                    "description": "The type of Salesforce object: Account, Contact, Opportunity, Lead, Task, or Case",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "fields": {
+                    "type": "string",
+                    "description": "Optional comma-separated list of specific fields to retrieve",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            }
+        },
+        "content_type": "application/json"
+    }
+}

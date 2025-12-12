@@ -1,0 +1,94 @@
+{
+    "type": "webhook",
+    "name": "update_record",
+    "description": "Update an existing Salesforce record. Use this to change opportunity stages, update contact info, mark tasks complete, change lead status, or modify any other record field.",
+    "response_timeout_secs": 30,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "api_schema": {
+        "request_headers": {
+            "Content-Type": "application/json"
+        },
+        "url": "https://gregarious-crocodile-506.convex.site/tools/update-record",
+        "method": "POST",
+        "path_params_schema": {},
+        "request_body_schema": {
+            "type": "object",
+            "required": ["recordId", "objectType"],
+            "description": "Parameters to update an existing Salesforce record",
+            "properties": {
+                "recordId": {
+                    "type": "string",
+                    "description": "The Salesforce record ID to update (18-character ID)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "objectType": {
+                    "type": "string",
+                    "description": "Type of record: Account, Contact, Opportunity, Lead, Task, or Case",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "StageName": {
+                    "type": "string",
+                    "description": "New stage (for Opportunity): Prospecting, Qualification, Needs Analysis, Value Proposition, Negotiation, Closed Won, Closed Lost",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Status": {
+                    "type": "string",
+                    "description": "New status (for Lead: Open, Working, Closed; for Task: Not Started, In Progress, Completed; for Case: New, Working, Escalated, Closed)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Amount": {
+                    "type": "number",
+                    "description": "Updated deal amount in dollars (for Opportunity)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "CloseDate": {
+                    "type": "string",
+                    "description": "Updated close date in YYYY-MM-DD format (for Opportunity)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Description": {
+                    "type": "string",
+                    "description": "Updated description or notes",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Phone": {
+                    "type": "string",
+                    "description": "Updated phone number",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "Email": {
+                    "type": "string",
+                    "description": "Updated email address",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            }
+        },
+        "content_type": "application/json"
+    }
+}

@@ -8,7 +8,10 @@
  * @module
  */
 
-import type * as myFunctions from "../myFunctions.js";
+import type * as ai from "../ai.js";
+import type * as conversations from "../conversations.js";
+import type * as http from "../http.js";
+import type * as salesforce from "../salesforce.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  myFunctions: typeof myFunctions;
+  ai: typeof ai;
+  conversations: typeof conversations;
+  http: typeof http;
+  salesforce: typeof salesforce;
 }>;
 
 /**

@@ -1,0 +1,33 @@
+{
+    "name": "get_my_pipeline",
+    "description": "Get the current user's sales pipeline (opportunities) from Salesforce. Use when user asks about 'my pipeline', 'my deals', 'my opportunities', or 'what's closing this quarter'.",
+    "type": "webhook",
+    "api_schema": {
+        "url": "https://gregarious-crocodile-506.convex.site/tools/my-pipeline",
+        "method": "POST",
+        "request_body_schema": {
+            "type": "object",
+            "description": "Filter parameters for pipeline retrieval",
+            "properties": {
+                "stage": {
+                    "type": "string",
+                    "description": "Filter by stage: 'open' for active deals, 'won' for closed won, 'lost' for closed lost"
+                },
+                "close_date": {
+                    "type": "string",
+                    "description": "Filter by close date: 'this_month', 'this_quarter', 'next_quarter'"
+                }
+            }
+        },
+        "request_headers": {
+            "Content-Type": "application/json"
+        }
+    },
+    "response_timeout_secs": 30,
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "assignments": [],
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true
+}

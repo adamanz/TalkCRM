@@ -10,7 +10,21 @@ export const startConversation = internalMutation({
     conversationId: v.string(),
     callerPhone: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("conversations")
+      .withIndex("by_conversation_id", (q) => q.eq("conversationId", args.conversationId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        callerPhone: args.callerPhone ?? existing.callerPhone,
+        status: "active",
+      });
+      return null;
+    }
+
     await ctx.db.insert("conversations", {
       conversationId: args.conversationId,
       callerPhone: args.callerPhone,
@@ -19,6 +33,7 @@ export const startConversation = internalMutation({
       salesforceRecordsAccessed: [],
       salesforceRecordsModified: [],
     });
+    return null;
   },
 });
 
@@ -27,8 +42,11 @@ export const completeConversation = internalMutation({
     conversationId: v.string(),
     transcript: v.optional(v.string()),
     summary: v.optional(v.string()),
+    startTime: v.optional(v.number()),
     endTime: v.number(),
+    callerPhone: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const conversation = await ctx.db
       .query("conversations")
@@ -42,9 +60,27 @@ export const completeConversation = internalMutation({
         status: "completed",
         transcript: args.transcript,
         summary: args.summary,
+        startTime: args.startTime ?? conversation.startTime,
         endTime: args.endTime,
+        callerPhone: args.callerPhone ?? conversation.callerPhone,
       });
+      return null;
     }
+
+    // If we didn't see a "start" event (e.g. when using an ElevenLabs-managed phone number),
+    // create the conversation record here.
+    await ctx.db.insert("conversations", {
+      conversationId: args.conversationId,
+      callerPhone: args.callerPhone,
+      startTime: args.startTime ?? args.endTime,
+      endTime: args.endTime,
+      status: "completed",
+      transcript: args.transcript,
+      summary: args.summary,
+      salesforceRecordsAccessed: [],
+      salesforceRecordsModified: [],
+    });
+    return null;
   },
 });
 
@@ -58,6 +94,7 @@ export const logToolCall = internalMutation({
     errorMessage: v.optional(v.string()),
     durationMs: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.insert("toolCalls", {
       conversationId: args.conversationId,
@@ -78,7 +115,19 @@ export const logToolCall = internalMutation({
       )
       .first();
 
-    if (conversation) {
+    // If we didn't get a start event (ElevenLabs-managed phone numbers), create an "active"
+    // conversation on first tool call so dashboards and stats work.
+    const conversationDoc =
+      conversation ??
+      (await ctx.db.insert("conversations", {
+        conversationId: args.conversationId,
+        startTime: Date.now(),
+        status: "active",
+        salesforceRecordsAccessed: [],
+        salesforceRecordsModified: [],
+      }).then((id) => ctx.db.get(id)));
+
+    if (conversationDoc) {
       try {
         const output = JSON.parse(args.output);
 
@@ -86,16 +135,16 @@ export const logToolCall = internalMutation({
         if (output.id) {
           const modifyTools = ["create_record", "update_record", "log_call"];
           if (modifyTools.includes(args.toolName)) {
-            await ctx.db.patch(conversation._id, {
+            await ctx.db.patch(conversationDoc._id, {
               salesforceRecordsModified: [
-                ...conversation.salesforceRecordsModified,
+                ...conversationDoc.salesforceRecordsModified,
                 output.id,
               ],
             });
           } else {
-            await ctx.db.patch(conversation._id, {
+            await ctx.db.patch(conversationDoc._id, {
               salesforceRecordsAccessed: [
-                ...conversation.salesforceRecordsAccessed,
+                ...conversationDoc.salesforceRecordsAccessed,
                 output.id,
               ],
             });
@@ -107,10 +156,10 @@ export const logToolCall = internalMutation({
           const recordIds = output.records
             .map((r: any) => r.Id || r.id)
             .filter(Boolean);
-          await ctx.db.patch(conversation._id, {
+          await ctx.db.patch(conversationDoc._id, {
             salesforceRecordsAccessed: [
               ...new Set([
-                ...conversation.salesforceRecordsAccessed,
+                ...conversationDoc.salesforceRecordsAccessed,
                 ...recordIds,
               ]),
             ],
@@ -120,6 +169,7 @@ export const logToolCall = internalMutation({
         // Ignore JSON parse errors
       }
     }
+    return null;
   },
 });
 
@@ -131,6 +181,21 @@ export const listConversations = query({
   args: {
     limit: v.optional(v.number()),
   },
+  returns: v.array(
+    v.object({
+      _id: v.id("conversations"),
+      _creationTime: v.number(),
+      conversationId: v.string(),
+      callerPhone: v.optional(v.string()),
+      startTime: v.number(),
+      endTime: v.optional(v.number()),
+      status: v.union(v.literal("active"), v.literal("completed"), v.literal("failed")),
+      transcript: v.optional(v.string()),
+      summary: v.optional(v.string()),
+      salesforceRecordsAccessed: v.array(v.string()),
+      salesforceRecordsModified: v.array(v.string()),
+    }),
+  ),
   handler: async (ctx, args) => {
     const conversations = await ctx.db
       .query("conversations")
@@ -145,6 +210,36 @@ export const getConversation = query({
   args: {
     conversationId: v.string(),
   },
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("conversations"),
+      _creationTime: v.number(),
+      conversationId: v.string(),
+      callerPhone: v.optional(v.string()),
+      startTime: v.number(),
+      endTime: v.optional(v.number()),
+      status: v.union(v.literal("active"), v.literal("completed"), v.literal("failed")),
+      transcript: v.optional(v.string()),
+      summary: v.optional(v.string()),
+      salesforceRecordsAccessed: v.array(v.string()),
+      salesforceRecordsModified: v.array(v.string()),
+      toolCalls: v.array(
+        v.object({
+          _id: v.id("toolCalls"),
+          _creationTime: v.number(),
+          conversationId: v.string(),
+          toolName: v.string(),
+          input: v.string(),
+          output: v.string(),
+          success: v.boolean(),
+          errorMessage: v.optional(v.string()),
+          durationMs: v.number(),
+          timestamp: v.number(),
+        }),
+      ),
+    }),
+  ),
   handler: async (ctx, args) => {
     const conversation = await ctx.db
       .query("conversations")
@@ -173,6 +268,14 @@ export const getConversation = query({
 
 export const getConversationStats = query({
   args: {},
+  returns: v.object({
+    total: v.number(),
+    today: v.number(),
+    thisWeek: v.number(),
+    avgDurationSeconds: v.number(),
+    recordsAccessed: v.number(),
+    recordsModified: v.number(),
+  }),
   handler: async (ctx) => {
     const allConversations = await ctx.db.query("conversations").collect();
 

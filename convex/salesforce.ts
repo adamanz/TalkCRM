@@ -12,9 +12,50 @@ interface SalesforceAuth {
 }
 
 async function getSalesforceAuth(ctx: any): Promise<SalesforceAuth> {
+  // First check for direct token in environment (for demo/testing)
+  const envToken = process.env.SALESFORCE_ACCESS_TOKEN;
+  const envInstanceUrl = process.env.SALESFORCE_INSTANCE_URL;
+
+  if (envToken && envInstanceUrl) {
+    return { accessToken: envToken, instanceUrl: envInstanceUrl };
+  }
+
+  // Try username-password flow if credentials are set
+  const username = process.env.SALESFORCE_USERNAME;
+  const password = process.env.SALESFORCE_PASSWORD;
+  const securityToken = process.env.SALESFORCE_SECURITY_TOKEN;
+  const clientId = process.env.SALESFORCE_CLIENT_ID;
+  const clientSecret = process.env.SALESFORCE_CLIENT_SECRET;
+
+  if (username && password && clientId && clientSecret) {
+    const loginUrl = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
+    const passwordWithToken = password + (securityToken || "");
+
+    const response = await fetch(`${loginUrl}/services/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "password",
+        client_id: clientId,
+        client_secret: clientSecret,
+        username: username,
+        password: passwordWithToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Salesforce auth failed: ${error}`);
+    }
+
+    const data = await response.json();
+    return { accessToken: data.access_token, instanceUrl: data.instance_url };
+  }
+
+  // Fall back to stored auth
   const auth = await ctx.runQuery(internal.salesforce.getStoredAuth);
   if (!auth) {
-    throw new Error("Salesforce not connected. Please authenticate first.");
+    throw new Error("Salesforce not connected. Please set SALESFORCE_ACCESS_TOKEN and SALESFORCE_INSTANCE_URL, or configure OAuth credentials.");
   }
 
   // Check if token is expired and refresh if needed

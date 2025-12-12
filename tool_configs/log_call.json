@@ -1,0 +1,82 @@
+{
+    "type": "webhook",
+    "name": "log_call",
+    "description": "Log this phone call as an activity in Salesforce. Creates a completed Task with CallType. Use when user says 'log this call' or asks to record the conversation.",
+    "response_timeout_secs": 30,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "api_schema": {
+        "request_headers": {
+            "Content-Type": "application/json"
+        },
+        "url": "https://gregarious-crocodile-506.convex.site/tools/log-call",
+        "method": "POST",
+        "path_params_schema": {},
+        "request_body_schema": {
+            "type": "object",
+            "required": [
+                "subject"
+            ],
+            "description": "Parameters to log a call activity in Salesforce",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Notes from the call",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "subject": {
+                    "type": "string",
+                    "description": "Subject of the call activity (e.g., 'Follow-up call with John')",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "duration_minutes": {
+                    "type": "number",
+                    "description": "Duration of the call in minutes",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "lead_id": {
+                    "type": "string",
+                    "description": "Lead ID to log the call against (alternative to contact_id)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "account_id": {
+                    "type": "string",
+                    "description": "Account ID to log the call against",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "opportunity_id": {
+                    "type": "string",
+                    "description": "Opportunity ID to log the call against",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "contact_id": {
+                    "type": "string",
+                    "description": "Contact ID to log the call against",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            }
+        },
+        "content_type": "application/json"
+    }
+}

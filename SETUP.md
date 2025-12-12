@@ -8,14 +8,64 @@ Voice-powered Salesforce CRM agent - let sales reps call in and interact with th
 Phone Call → Twilio → ElevenLabs Conversational AI → Convex HTTP Actions → Salesforce REST API
 ```
 
-## Prerequisites
+## What's Been Created
 
-- [Convex](https://convex.dev) account
-- [ElevenLabs](https://elevenlabs.io) account (with Conversational AI access)
-- [Twilio](https://twilio.com) account with a phone number
-- [Salesforce](https://salesforce.com) org with a Connected App
+### ElevenLabs Agent
+- **Agent ID**: `agent_0701kc80pzcvfnytxrbeaezmy4tg`
+- **Name**: TalkCRM
+- Pre-configured prompt for Salesforce interactions
 
-## Step 1: Salesforce Connected App
+### ElevenLabs Tools (7 webhook tools)
+| Tool | ID | Purpose |
+|------|-----|---------|
+| search_salesforce | tool_3001kc80s35dfdmt55k3qf4t4hce | Search records |
+| get_record | tool_0501kc80swvgfm6s4f5n9asjnbkb | Get record details |
+| create_record | tool_0101kc80sznde6z87xfdv7q8n003 | Create new records |
+| update_record | tool_3401kc80t1pgfr9vmtb87d0k4se1 | Update records |
+| log_call | tool_1601kc80t3zbfx0ah1834fzr6jfp | Log call activities |
+| get_my_tasks | tool_9301kc80t6gye70vbq5fm5g0sahb | Get user's tasks |
+| get_my_pipeline | tool_3301kc80t8cqe158ahxtvsx0yn6e | Get user's opportunities |
+
+### Convex Backend
+- Schema for conversations and tool call logging
+- Salesforce API integration layer
+- HTTP endpoints for all tools
+- Twilio webhook handler
+- OAuth callback handler
+
+## Setup Steps
+
+### Step 1: Deploy Convex
+
+```bash
+# Run the dev command to configure project interactively
+npx convex dev
+
+# When prompted:
+# - Create a new project or select existing
+# - Note your deployment URL (e.g., https://your-project.convex.site)
+```
+
+### Step 2: Update Tool URLs
+
+Once you have your Convex site URL, update all tool configs:
+
+```bash
+# Replace placeholder URL with your actual Convex URL
+CONVEX_URL="https://your-project.convex.site"
+
+# Update all tool configs
+for file in tool_configs/*.json; do
+  sed -i '' "s|\${CONVEX_SITE_URL}|$CONVEX_URL|g" "$file"
+done
+
+# Push updated tools to ElevenLabs
+elevenlabs tools push
+```
+
+Or manually edit each file in `tool_configs/` to replace `${CONVEX_SITE_URL}`.
+
+### Step 3: Create Salesforce Connected App
 
 1. Go to **Setup → App Manager → New Connected App**
 2. Configure:
@@ -28,145 +78,119 @@ Phone Call → Twilio → ElevenLabs Conversational AI → Convex HTTP Actions �
      - `api` (Access and manage your data)
      - `refresh_token` (Perform requests at any time)
      - `chatter_api` (Access Chatter API)
-3. Save and note the **Consumer Key** and **Consumer Secret**
+3. Save and note **Consumer Key** and **Consumer Secret**
 
-## Step 2: Deploy Convex
-
-```bash
-# Install dependencies
-npm install
-
-# Login to Convex
-npx convex login
-
-# Deploy to Convex
-npx convex dev
-```
-
-Note your Convex deployment URL (e.g., `https://your-deployment.convex.site`)
-
-## Step 3: Set Convex Environment Variables
+### Step 4: Set Convex Environment Variables
 
 ```bash
-npx convex env set SALESFORCE_CLIENT_ID "your_client_id"
-npx convex env set SALESFORCE_CLIENT_SECRET "your_client_secret"
-npx convex env set SALESFORCE_REDIRECT_URI "https://your-deployment.convex.site/auth/salesforce/callback"
-npx convex env set ELEVENLABS_API_KEY "your_elevenlabs_key"
-npx convex env set ELEVENLABS_AGENT_ID "your_agent_id"  # Set after creating agent
+npx convex env set SALESFORCE_CLIENT_ID "your_consumer_key"
+npx convex env set SALESFORCE_CLIENT_SECRET "your_consumer_secret"
+npx convex env set SALESFORCE_REDIRECT_URI "https://your-convex-url.convex.site/auth/salesforce/callback"
+npx convex env set ELEVENLABS_API_KEY "your_elevenlabs_api_key"
+npx convex env set ELEVENLABS_AGENT_ID "agent_0701kc80pzcvfnytxrbeaezmy4tg"
 ```
 
-## Step 4: Create ElevenLabs Agent
+### Step 5: Link Tools to Agent
 
-### Option A: Using ElevenLabs CLI (Recommended)
+In the ElevenLabs dashboard or via CLI, add the tools to the TalkCRM agent:
 
-1. Install the CLI:
-   ```bash
-   npm install -g @elevenlabs/cli
-   ```
+```bash
+# Update agent config to include tool IDs
+# Edit agent_configs/TalkCRM.json and add tool_ids to the prompt section
+```
 
-2. Set your API key:
-   ```bash
-   export ELEVENLABS_API_KEY=your_api_key
-   ```
+Or in ElevenLabs Dashboard:
+1. Go to Conversational AI → Agents → TalkCRM
+2. Add each tool to the agent
 
-3. Update `elevenlabs/agent.yaml` with your Convex URL:
-   - Replace `{{CONVEX_URL}}` with your actual Convex site URL
-
-4. Deploy the agent:
-   ```bash
-   cd elevenlabs
-   elevenlabs agents push
-   ```
-
-5. Note the Agent ID and set it in Convex:
-   ```bash
-   npx convex env set ELEVENLABS_AGENT_ID "your_agent_id"
-   ```
-
-### Option B: Using ElevenLabs Dashboard
-
-1. Go to [ElevenLabs Conversational AI](https://elevenlabs.io/app/conversational-ai)
-2. Create a new agent
-3. Configure the prompt from `elevenlabs/agent.yaml`
-4. Add server tools manually (see tool definitions in the YAML)
-5. Note the Agent ID
-
-## Step 5: Configure Twilio
+### Step 6: Configure Twilio
 
 1. Get a phone number from [Twilio Console](https://console.twilio.com)
-
 2. Configure the phone number's Voice webhook:
    - **When a call comes in**: Webhook
-   - **URL**: `https://your-deployment.convex.site/webhooks/twilio/incoming`
+   - **URL**: `https://your-convex-url.convex.site/webhooks/twilio/incoming`
    - **HTTP Method**: POST
 
-3. Set Convex environment variables:
-   ```bash
-   npx convex env set TWILIO_ACCOUNT_SID "your_account_sid"
-   npx convex env set TWILIO_AUTH_TOKEN "your_auth_token"
-   npx convex env set TWILIO_PHONE_NUMBER "+15551234567"
-   ```
+### Step 7: Connect Salesforce
 
-## Step 6: Connect Salesforce
+1. Start the frontend: `npm run dev`
+2. Open http://localhost:5173
+3. Click "Connect Salesforce" and authorize
 
-1. Start the frontend:
-   ```bash
-   npm run dev
-   ```
+### Step 8: Test!
 
-2. Open `http://localhost:5173`
+Call your Twilio phone number and try:
+- "Show me my pipeline"
+- "What tasks do I have today?"
+- "Find the Acme account"
 
-3. Click "Connect Salesforce" and authorize the app
+## Project Structure
 
-## Step 7: Test It!
+```
+TalkCRM/
+├── convex/
+│   ├── schema.ts           # Database schema
+│   ├── salesforce.ts       # Salesforce API integration
+│   ├── conversations.ts    # Conversation logging
+│   └── http.ts            # HTTP endpoints for tools & webhooks
+├── agent_configs/
+│   └── TalkCRM.json       # ElevenLabs agent config
+├── tool_configs/
+│   ├── search_salesforce.json
+│   ├── get_record.json
+│   ├── create_record.json
+│   ├── update_record.json
+│   ├── log_call.json
+│   ├── get_my_tasks.json
+│   └── get_my_pipeline.json
+├── agents.json            # ElevenLabs agents registry
+├── tools.json             # ElevenLabs tools registry
+└── src/
+    └── App.tsx            # Dashboard frontend
+```
 
-1. Call your Twilio phone number
-2. Say "Show me my pipeline" or "What tasks do I have today?"
-3. The AI will query Salesforce and respond
+## Endpoints
 
-## Troubleshooting
+### Tool Endpoints (called by ElevenLabs)
+| Endpoint | Tool |
+|----------|------|
+| POST /tools/search | search_salesforce |
+| POST /tools/get-record | get_record |
+| POST /tools/create-record | create_record |
+| POST /tools/update-record | update_record |
+| POST /tools/log-call | log_call |
+| POST /tools/my-tasks | get_my_tasks |
+| POST /tools/my-pipeline | get_my_pipeline |
 
-### "Salesforce not connected" error
-- Ensure you've completed the OAuth flow by clicking "Connect Salesforce"
-- Check that `salesforceAuth` table has a record in Convex Dashboard
-
-### Tools not working
-- Verify Convex HTTP routes are deployed: check `/webhooks/*` endpoints
-- Check Convex logs for errors: `npx convex logs`
-- Ensure ElevenLabs agent has the correct webhook URLs
-
-### Call connects but no response
-- Verify `ELEVENLABS_AGENT_ID` is set correctly
-- Check ElevenLabs dashboard for conversation logs
-- Ensure Twilio webhook URL is correct
-
-## Server Tool Endpoints
-
+### Webhook Endpoints
 | Endpoint | Purpose |
 |----------|---------|
-| `/tools/search` | Search Salesforce records (SOQL/SOSL) |
-| `/tools/get-record` | Get single record by ID |
-| `/tools/create-record` | Create new record |
-| `/tools/update-record` | Update existing record |
-| `/tools/log-call` | Log call activity |
-| `/tools/my-tasks` | Get current user's tasks |
-| `/tools/my-pipeline` | Get current user's opportunities |
+| POST /webhooks/twilio/incoming | Twilio call handler |
+| POST /webhooks/elevenlabs/post-call | Call completion data |
+| GET /auth/salesforce/callback | OAuth callback |
 
-## Webhook Endpoints
-
-| Endpoint | Purpose |
-|----------|---------|
-| `/webhooks/twilio/incoming` | Handle incoming Twilio calls |
-| `/webhooks/elevenlabs/post-call` | Receive call completion data |
-| `/auth/salesforce/callback` | OAuth callback for Salesforce |
-
-## Voice Commands Examples
+## Voice Commands
 
 | Say This | What Happens |
 |----------|--------------|
-| "Show me my pipeline" | Lists your open opportunities with amounts |
+| "Show me my pipeline" | Lists open opportunities with amounts |
 | "Find the Acme account" | Searches for accounts named Acme |
-| "What tasks do I have today?" | Lists your tasks due today |
+| "What tasks do I have today?" | Lists tasks due today |
 | "Create a task to follow up with John tomorrow" | Creates a new task |
 | "Update the Acme deal to Closed Won" | Updates opportunity stage |
-| "Log this call on the Johnson contact" | Creates a call activity record |
+| "Log this call on the Johnson contact" | Creates call activity |
+
+## Troubleshooting
+
+### Tools not working
+1. Check tool URLs are correct: `cat tool_configs/search_salesforce.json`
+2. Verify tools are pushed: `elevenlabs tools push`
+3. Check Convex logs: `npx convex logs`
+
+### "Salesforce not connected"
+1. Complete OAuth flow via dashboard
+2. Check `salesforceAuth` table in Convex
+
+### Agent not responding
+1. Verify `ELEVENLABS_AGENT_ID` env var is set
+2. Check agent status: `elevenlabs agents status`

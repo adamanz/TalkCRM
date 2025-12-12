@@ -1,3 +1,54 @@
 {
-    "tools": []
+    "tools": [
+        {
+            "type": "webhook",
+            "config": "tool_configs/search_salesforce.json",
+            "id": "tool_3001kc80s35dfdmt55k3qf4t4hce"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/get_record.json",
+            "id": "tool_0501kc80swvgfm6s4f5n9asjnbkb"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/create_record.json",
+            "id": "tool_0101kc80sznde6z87xfdv7q8n003"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/update_record.json",
+            "id": "tool_3401kc80t1pgfr9vmtb87d0k4se1"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/log_call.json",
+            "id": "tool_1601kc80t3zbfx0ah1834fzr6jfp"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/get_my_tasks.json",
+            "id": "tool_9301kc80t6gye70vbq5fm5g0sahb"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/get_my_pipeline.json",
+            "id": "tool_3301kc80t8cqe158ahxtvsx0yn6e"
+        },
+        {
+            "type": "api_integration_webhook",
+            "config": "/Users/adamanz/TalkCRM/tool_configs_pulled/exa_search-1.json",
+            "id": "tool_2801kc2gt1ngfv4r2ayd4mjm5nq8"
+        },
+        {
+            "type": "api_integration_webhook",
+            "config": "/Users/adamanz/TalkCRM/tool_configs_pulled/exa_search-2.json",
+            "id": "tool_2801kc2gt1ngfv4r2ayd4mjm5nq8"
+        },
+        {
+            "type": "webhook",
+            "config": "tool_configs/salesforce_assistant.json",
+            "id": "tool_8601kc83dphpfta8dyxbg9me2b68"
+        }
+    ]
 }

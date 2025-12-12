@@ -1,0 +1,54 @@
+{
+    "type": "webhook",
+    "name": "search_salesforce",
+    "description": "Search for Salesforce records by name or keyword. Use this to find accounts, contacts, opportunities, leads, or cases. Returns matching records with basic info.",
+    "response_timeout_secs": 30,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": true,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "api_schema": {
+        "request_headers": {
+            "Content-Type": "application/json"
+        },
+        "url": "https://gregarious-crocodile-506.convex.site/tools/search",
+        "method": "POST",
+        "path_params_schema": {},
+        "request_body_schema": {
+            "type": "object",
+            "required": [
+                "query"
+            ],
+            "description": "Search parameters for Salesforce records",
+            "properties": {
+                "limit": {
+                    "type": "number",
+                    "description": "Maximum number of results to return (default 10)",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "query": {
+                    "type": "string",
+                    "description": "The search term - account name, contact name, or keywords to search for",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "object_type": {
+                    "type": "string",
+                    "description": "Type of record to search: Account, Contact, Opportunity, Lead, Case. If not specified, searches all types.",
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            }
+        },
+        "content_type": "application/json"
+    }
+}
