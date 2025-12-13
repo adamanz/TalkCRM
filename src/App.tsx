@@ -1,64 +1,483 @@
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import { useState, useEffect, createContext, useContext, ReactNode } from "react";
+import { Id } from "../convex/_generated/dataModel";
+
+// ============================================================================
+// AUTH CONTEXT - Manage user authentication state
+// ============================================================================
+
+interface User {
+  _id: Id<"users">;
+  email: string;
+  name: string;
+  verifiedPhones: string[];
+  primaryPhone?: string;
+  status: "active" | "suspended" | "pending";
+  tier?: "free" | "starter" | "pro" | "enterprise";
+}
+
+interface AuthContextType {
+  user: User | null;
+  userId: Id<"users"> | null;
+  isLoading: boolean;
+  login: (userId: Id<"users">) => void;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
+  return context;
+}
+
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [userId, setUserId] = useState<Id<"users"> | null>(() => {
+    const stored = localStorage.getItem("talkcrm_userId");
+    return stored as Id<"users"> | null;
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  const user = useQuery(api.users.getCurrentUser, { userId: userId ?? undefined });
+
+  useEffect(() => {
+    if (user !== undefined) {
+      setIsLoading(false);
+      // If user not found, clear stored userId
+      if (userId && user === null) {
+        localStorage.removeItem("talkcrm_userId");
+        setUserId(null);
+      }
+    }
+  }, [user, userId]);
+
+  const login = (newUserId: Id<"users">) => {
+    localStorage.setItem("talkcrm_userId", newUserId);
+    setUserId(newUserId);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("talkcrm_userId");
+    setUserId(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user: user ?? null, userId, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// ============================================================================
+// MAIN APP
+// ============================================================================
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <span className="text-white text-xl">📞</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">TalkCRM</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Voice-Powered Salesforce</p>
-            </div>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+function AppContent() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <span className="text-white text-3xl">📞</span>
           </div>
-          <SalesforceStatus />
+          <p className="text-slate-500">Loading...</p>
         </div>
-      </header>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <Header user={user} />
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <Dashboard />
+        <Dashboard userId={user._id} />
       </main>
     </div>
   );
 }
 
-function SalesforceStatus() {
-  // TODO: Check Salesforce connection status
-  const isConnected = false; // Will be replaced with actual check
+// ============================================================================
+// AUTH PAGE - Login / Signup
+// ============================================================================
+
+function AuthPage() {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [step, setStep] = useState<"form" | "verify">("form");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const { login } = useAuth();
+
+  const convexUrl = import.meta.env.VITE_CONVEX_URL || "";
+  const httpUrl = convexUrl.replace(".cloud", ".site");
+
+  const handleStartVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const endpoint = mode === "signup"
+        ? `${httpUrl}/api/auth/signup/start`
+        : `${httpUrl}/api/auth/login/start`;
+
+      const body = mode === "signup"
+        ? { email, name, phone }
+        : { phone };
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send verification code");
+      }
+
+      // In dev mode, show the code
+      if (data.code) {
+        setDevCode(data.code);
+      }
+
+      setStep("verify");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${httpUrl}/api/auth/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, code }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Verification failed");
+      }
+
+      // Login successful!
+      login(data.userId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  };
 
   return (
-    <div className="flex items-center gap-2">
-      <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-      <span className="text-sm text-slate-600 dark:text-slate-300">
-        {isConnected ? 'Salesforce Connected' : 'Connect Salesforce'}
-      </span>
-      {!isConnected && (
-        <a
-          href={getSalesforceAuthUrl()}
-          className="ml-2 px-3 py-1 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-        >
-          Connect
-        </a>
-      )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <span className="text-white text-4xl">📞</span>
+          </div>
+          <h1 className="text-3xl font-bold text-white">TalkCRM</h1>
+          <p className="text-blue-200 mt-2">Voice-Powered Salesforce Assistant</p>
+        </div>
+
+        {/* Auth Card */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-2xl">
+          {step === "form" ? (
+            <>
+              {/* Mode Toggle */}
+              <div className="flex mb-6 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                <button
+                  onClick={() => setMode("login")}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                    mode === "login"
+                      ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow"
+                      : "text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  Log In
+                </button>
+                <button
+                  onClick={() => setMode("signup")}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                    mode === "signup"
+                      ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow"
+                      : "text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  Sign Up
+                </button>
+              </div>
+
+              <form onSubmit={handleStartVerification} className="space-y-4">
+                {mode === "signup" && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="John Smith"
+                        className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="john@company.com"
+                        className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
+                    placeholder="(415) 555-1234"
+                    className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                    required
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    This phone will be used to authenticate your calls
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {isLoading ? "Sending Code..." : "Send Verification Code"}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setStep("form");
+                  setCode("");
+                  setDevCode(null);
+                }}
+                className="text-blue-500 text-sm mb-4 hover:underline"
+              >
+                &larr; Back
+              </button>
+
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                Enter Verification Code
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+                We sent a 6-digit code to {phone}
+              </p>
+
+              {devCode && (
+                <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 text-sm rounded-lg mb-4">
+                  <strong>Dev Mode:</strong> Your code is <code className="font-mono font-bold">{devCode}</code>
+                </div>
+              )}
+
+              <form onSubmit={handleVerifyCode} className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    className="w-full px-4 py-4 text-center text-2xl font-mono tracking-widest rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    maxLength={6}
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoading || code.length !== 6}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {isLoading ? "Verifying..." : "Verify & Continue"}
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+
+        {/* Info */}
+        <p className="text-center text-blue-200/60 text-sm mt-6">
+          Your phone number is how we identify you when you call.
+          <br />
+          No password needed - just call from your registered phone!
+        </p>
+      </div>
     </div>
   );
 }
 
-function getSalesforceAuthUrl() {
-  const clientId = import.meta.env.VITE_SALESFORCE_CLIENT_ID || 'YOUR_CLIENT_ID';
-  const redirectUri = import.meta.env.VITE_SALESFORCE_REDIRECT_URI || 'http://localhost:5173/auth/callback';
-  return `https://login.salesforce.com/services/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+// ============================================================================
+// HEADER
+// ============================================================================
+
+function Header({ user }: { user: User }) {
+  const { logout } = useAuth();
+
+  return (
+    <header className="sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+            <span className="text-white text-xl">📞</span>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">TalkCRM</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Voice-Powered Salesforce</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <AgentStatus />
+          <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+            <div className="text-right">
+              <p className="text-sm font-medium text-slate-900 dark:text-white">{user.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{user.primaryPhone}</p>
+            </div>
+            <button
+              onClick={logout}
+              className="px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-red-500 transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
 }
 
-function Dashboard() {
-  const stats = useQuery(api.conversations.getConversationStats);
-  const conversations = useQuery(api.conversations.listConversations, { limit: 10 });
+// ============================================================================
+// REAL-TIME AGENT STATUS (Shows in header when agent is working)
+// ============================================================================
+
+function AgentStatus() {
+  const latestActivity = useQuery(api.activities.getLatestActivity);
+  const [isRecent, setIsRecent] = useState(false);
+
+  useEffect(() => {
+    if (latestActivity) {
+      const age = Date.now() - latestActivity.timestamp;
+      setIsRecent(age < 30000); // Activity in last 30 seconds
+    }
+  }, [latestActivity]);
+
+  if (!latestActivity || !isRecent) return null;
+
+  const getStatusColor = (type: string) => {
+    switch (type) {
+      case "thinking": return "bg-yellow-500";
+      case "searching": return "bg-blue-500";
+      case "found": return "bg-green-500";
+      case "creating": return "bg-purple-500";
+      case "updating": return "bg-orange-500";
+      case "success": return "bg-green-500";
+      case "error": return "bg-red-500";
+      default: return "bg-slate-500";
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-full">
+      <div className={`w-2 h-2 rounded-full ${getStatusColor(latestActivity.type)} animate-pulse`} />
+      <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+        {latestActivity.message}
+      </span>
+    </div>
+  );
+}
+
+function Dashboard({ userId }: { userId: Id<"users"> }) {
+  const stats = useQuery(api.conversations.getConversationStats, { userId });
+  const conversations = useQuery(api.conversations.listConversations, { limit: 10, userId });
+  const activities = useQuery(api.activities.getRecentActivities, { limit: 10 });
+  const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
+
+  // Auto-clear highlight after 5 seconds
+  useEffect(() => {
+    if (highlightedRecordId) {
+      const timer = setTimeout(() => setHighlightedRecordId(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedRecordId]);
 
   return (
     <div className="space-y-8">
+      {/* Real-time Activity Feed - Prominent at top */}
+      <ActivityFeed
+        activities={activities || []}
+        onRecordClick={(recordId) => setHighlightedRecordId(recordId)}
+        highlightedRecordId={highlightedRecordId}
+      />
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -96,7 +515,7 @@ function Dashboard() {
           <Step
             number={1}
             title="Call the Number"
-            description="Call your dedicated TalkCRM phone number to connect with your AI assistant"
+            description="Call from your registered phone to automatically authenticate"
           />
           <Step
             number={2}
@@ -116,8 +535,8 @@ function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm opacity-80">Your TalkCRM Number</p>
-            <p className="text-3xl font-bold font-mono">+1 (555) 123-4567</p>
-            <p className="text-sm mt-2 opacity-80">Call anytime to talk to your Salesforce data</p>
+            <p className="text-3xl font-bold font-mono">+1 (646) 600-5041</p>
+            <p className="text-sm mt-2 opacity-80">Call from your registered phone to authenticate automatically</p>
           </div>
           <div className="text-6xl">📱</div>
         </div>
@@ -159,7 +578,7 @@ function Dashboard() {
       {/* Recent Conversations */}
       <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-          Recent Conversations
+          Your Recent Conversations
         </h2>
         {!conversations || conversations.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400 text-center py-8">
@@ -205,6 +624,132 @@ function StatCard({
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${colorClasses[color]}`}>
           {icon}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ACTIVITY FEED - Real-time agent activity display
+// ============================================================================
+
+type ActivityType = "thinking" | "searching" | "found" | "creating" | "updating" | "success" | "error";
+
+interface Activity {
+  _id: string;
+  type: ActivityType;
+  message: string;
+  toolName?: string;
+  recordId?: string;
+  recordName?: string;
+  recordType?: string;
+  timestamp: number;
+}
+
+function ActivityFeed({
+  activities,
+  onRecordClick,
+  highlightedRecordId,
+}: {
+  activities: Activity[];
+  onRecordClick: (recordId: string) => void;
+  highlightedRecordId: string | null;
+}) {
+  if (activities.length === 0) {
+    return (
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-3 h-3 bg-slate-500 rounded-full" />
+          <h2 className="text-lg font-semibold">Agent Activity</h2>
+        </div>
+        <p className="text-slate-400 text-sm">Waiting for voice commands...</p>
+        <p className="text-slate-500 text-xs mt-2">Call +1 (646) 600-5041 to start</p>
+      </div>
+    );
+  }
+
+  const getActivityIcon = (type: ActivityType) => {
+    switch (type) {
+      case "thinking": return "🤔";
+      case "searching": return "🔍";
+      case "found": return "📋";
+      case "creating": return "➕";
+      case "updating": return "✏️";
+      case "success": return "✅";
+      case "error": return "❌";
+      default: return "📌";
+    }
+  };
+
+  const getActivityColor = (type: ActivityType) => {
+    switch (type) {
+      case "thinking": return "border-yellow-500 bg-yellow-500/10";
+      case "searching": return "border-blue-500 bg-blue-500/10";
+      case "found": return "border-green-500 bg-green-500/10";
+      case "creating": return "border-purple-500 bg-purple-500/10";
+      case "updating": return "border-orange-500 bg-orange-500/10";
+      case "success": return "border-green-500 bg-green-500/10";
+      case "error": return "border-red-500 bg-red-500/10";
+      default: return "border-slate-500 bg-slate-500/10";
+    }
+  };
+
+  const formatTimestamp = (ts: number) => {
+    const diff = Date.now() - ts;
+    if (diff < 1000) return "just now";
+    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    return new Date(ts).toLocaleTimeString();
+  };
+
+  // Check if there's recent activity (within 30 seconds)
+  const hasRecentActivity = activities.some(a => Date.now() - a.timestamp < 30000);
+
+  return (
+    <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-6 text-white overflow-hidden">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-3 h-3 rounded-full ${hasRecentActivity ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`} />
+          <h2 className="text-lg font-semibold">Agent Activity</h2>
+        </div>
+        {hasRecentActivity && (
+          <span className="text-xs text-green-400 font-medium">LIVE</span>
+        )}
+      </div>
+
+      <div className="space-y-3 max-h-64 overflow-y-auto">
+        {activities.map((activity) => {
+          const isHighlighted = activity.recordId === highlightedRecordId;
+          const isRecent = Date.now() - activity.timestamp < 5000;
+
+          return (
+            <div
+              key={activity._id}
+              className={`
+                flex items-start gap-3 p-3 rounded-lg border-l-4 transition-all duration-300
+                ${getActivityColor(activity.type)}
+                ${isRecent ? 'animate-pulse' : ''}
+                ${isHighlighted ? 'ring-2 ring-white/50' : ''}
+              `}
+            >
+              <span className="text-xl flex-shrink-0">{getActivityIcon(activity.type)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white font-medium">{activity.message}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  {activity.recordName && (
+                    <button
+                      onClick={() => activity.recordId && onRecordClick(activity.recordId)}
+                      className="text-xs text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+                    >
+                      {activity.recordType}: {activity.recordName}
+                    </button>
+                  )}
+                  <span className="text-xs text-slate-500">{formatTimestamp(activity.timestamp)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -8,10 +8,13 @@
  * @module
  */
 
+import type * as activities from "../activities.js";
 import type * as ai from "../ai.js";
 import type * as conversations from "../conversations.js";
 import type * as http from "../http.js";
 import type * as salesforce from "../salesforce.js";
+import type * as twilio from "../twilio.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -20,10 +23,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activities: typeof activities;
   ai: typeof ai;
   conversations: typeof conversations;
   http: typeof http;
   salesforce: typeof salesforce;
+  twilio: typeof twilio;
+  users: typeof users;
 }>;
 
 /**

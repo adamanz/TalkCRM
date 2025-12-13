@@ -68,11 +68,6 @@ interface ClaudeMessage {
   content: string;
 }
 
-interface ToolCall {
-  name: string;
-  input: Record<string, any>;
-}
-
 interface ParsedIntent {
   action: "search" | "query" | "create" | "update" | "log_call" | "clarify";
   objectType?: string;
@@ -164,9 +159,11 @@ export const askSalesforce = action({
 
         case "create":
           if (interpretation.objectType && interpretation.fields) {
+            // Process date placeholders in fields
+            const processedFields = processDatePlaceholders(interpretation.fields);
             const createResult = await ctx.runAction(api.salesforce.createRecord, {
               objectType: interpretation.objectType,
-              fields: interpretation.fields,
+              fields: processedFields,
             });
             return {
               response: interpretation.response || `Done! I created a new ${interpretation.objectType}.`,
@@ -375,6 +372,42 @@ function formatTasks(tasks: any[]): string {
   response += `. Including ${subjects}.`;
 
   return response;
+}
+
+/**
+ * Process date placeholders like TOMORROW, TODAY, NEXT_WEEK
+ */
+function processDatePlaceholders(fields: Record<string, any>): Record<string, any> {
+  const processed = { ...fields };
+  const today = new Date();
+
+  for (const [key, value] of Object.entries(processed)) {
+    if (typeof value === "string") {
+      const upperValue = value.toUpperCase();
+      if (upperValue === "TODAY") {
+        processed[key] = today.toISOString().split("T")[0];
+      } else if (upperValue === "TOMORROW") {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        processed[key] = tomorrow.toISOString().split("T")[0];
+      } else if (upperValue === "NEXT_WEEK" || upperValue === "NEXT WEEK") {
+        const nextWeek = new Date(today);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        processed[key] = nextWeek.toISOString().split("T")[0];
+      } else if (upperValue === "END_OF_WEEK" || upperValue === "END OF WEEK" || upperValue === "THIS_WEEK") {
+        const endOfWeek = new Date(today);
+        const daysUntilFriday = (5 - today.getDay() + 7) % 7;
+        endOfWeek.setDate(endOfWeek.getDate() + daysUntilFriday);
+        processed[key] = endOfWeek.toISOString().split("T")[0];
+      } else if (upperValue === "NEXT_MONTH" || upperValue === "NEXT MONTH") {
+        const nextMonth = new Date(today);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        processed[key] = nextMonth.toISOString().split("T")[0];
+      }
+    }
+  }
+
+  return processed;
 }
 
 /**

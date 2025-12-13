@@ -141,13 +141,36 @@ export const updateAuth = internalMutation({
     refreshToken: v.string(),
     instanceUrl: v.string(),
     expiresAt: v.number(),
+    userId: v.optional(v.id("users")), // Optional for legacy/demo mode
+    salesforceUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // For demo mode without users, use a placeholder userId
+    // In production, require userId
     const existing = await ctx.db.query("salesforceAuth").first();
+
     if (existing) {
-      await ctx.db.patch(existing._id, args);
+      await ctx.db.patch(existing._id, {
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken,
+        instanceUrl: args.instanceUrl,
+        expiresAt: args.expiresAt,
+        salesforceUserId: args.salesforceUserId,
+      });
     } else {
-      await ctx.db.insert("salesforceAuth", args);
+      // For new records, we need a userId - use a placeholder if not provided
+      // This maintains backward compatibility with the hackathon demo
+      if (!args.userId) {
+        throw new Error("userId is required for new Salesforce auth records");
+      }
+      await ctx.db.insert("salesforceAuth", {
+        userId: args.userId,
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken,
+        instanceUrl: args.instanceUrl,
+        expiresAt: args.expiresAt,
+        salesforceUserId: args.salesforceUserId,
+      });
     }
   },
 });
@@ -188,6 +211,12 @@ export const searchRecords = action({
         records: searchResult.searchRecords || [],
         totalSize: searchResult.searchRecords?.length || 0,
       };
+    }
+
+    // Replace CURRENT_USER placeholder with actual user ID if present
+    if (soql.includes("CURRENT_USER")) {
+      const userInfo = await salesforceRequest(auth, "/chatter/users/me");
+      soql = soql.replace(/['"]?CURRENT_USER['"]?/g, `'${userInfo.id}'`);
     }
 
     // Execute raw SOQL

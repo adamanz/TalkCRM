@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 
 // ============================================================================
 // INTERNAL MUTATIONS (Called by HTTP actions)
@@ -9,6 +9,7 @@ export const startConversation = internalMutation({
   args: {
     conversationId: v.string(),
     callerPhone: v.optional(v.string()),
+    userId: v.optional(v.id("users")), // Link to authenticated user
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -20,6 +21,7 @@ export const startConversation = internalMutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         callerPhone: args.callerPhone ?? existing.callerPhone,
+        userId: args.userId ?? existing.userId,
         status: "active",
       });
       return null;
@@ -28,6 +30,7 @@ export const startConversation = internalMutation({
     await ctx.db.insert("conversations", {
       conversationId: args.conversationId,
       callerPhone: args.callerPhone,
+      userId: args.userId,
       startTime: Date.now(),
       status: "active",
       salesforceRecordsAccessed: [],
@@ -180,12 +183,14 @@ export const logToolCall = internalMutation({
 export const listConversations = query({
   args: {
     limit: v.optional(v.number()),
+    userId: v.optional(v.id("users")), // Filter by user
   },
   returns: v.array(
     v.object({
       _id: v.id("conversations"),
       _creationTime: v.number(),
       conversationId: v.string(),
+      userId: v.optional(v.id("users")),
       callerPhone: v.optional(v.string()),
       startTime: v.number(),
       endTime: v.optional(v.number()),
@@ -197,6 +202,17 @@ export const listConversations = query({
     }),
   ),
   handler: async (ctx, args) => {
+    // If userId is provided, filter by user
+    if (args.userId) {
+      const conversations = await ctx.db
+        .query("conversations")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .order("desc")
+        .take(args.limit || 50);
+      return conversations;
+    }
+
+    // Otherwise return all (for admin view)
     const conversations = await ctx.db
       .query("conversations")
       .order("desc")
@@ -267,7 +283,9 @@ export const getConversation = query({
 });
 
 export const getConversationStats = query({
-  args: {},
+  args: {
+    userId: v.optional(v.id("users")), // Filter by user
+  },
   returns: v.object({
     total: v.number(),
     today: v.number(),
@@ -276,8 +294,17 @@ export const getConversationStats = query({
     recordsAccessed: v.number(),
     recordsModified: v.number(),
   }),
-  handler: async (ctx) => {
-    const allConversations = await ctx.db.query("conversations").collect();
+  handler: async (ctx, args) => {
+    // Get conversations, optionally filtered by user
+    let allConversations;
+    if (args.userId) {
+      allConversations = await ctx.db
+        .query("conversations")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect();
+    } else {
+      allConversations = await ctx.db.query("conversations").collect();
+    }
 
     const now = Date.now();
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
@@ -290,11 +317,11 @@ export const getConversationStats = query({
       (c) => c.startTime > oneWeekAgo
     );
 
-    const avgDuration =
-      allConversations
-        .filter((c) => c.endTime)
-        .reduce((sum, c) => sum + (c.endTime! - c.startTime), 0) /
-      allConversations.filter((c) => c.endTime).length;
+    const completedConversations = allConversations.filter((c) => c.endTime);
+    const avgDuration = completedConversations.length > 0
+      ? completedConversations.reduce((sum, c) => sum + (c.endTime! - c.startTime), 0) /
+        completedConversations.length
+      : 0;
 
     return {
       total: allConversations.length,

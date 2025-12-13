@@ -2,6 +2,32 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 
+// Helper to log activity to dashboard
+type ActivityType = "thinking" | "searching" | "found" | "creating" | "updating" | "success" | "error";
+
+async function logActivity(
+  ctx: any,
+  type: ActivityType,
+  message: string,
+  options?: {
+    toolName?: string;
+    recordId?: string;
+    recordName?: string;
+    recordType?: string;
+    conversationId?: string;
+  }
+) {
+  try {
+    await ctx.runMutation(internal.activities.logActivityInternal, {
+      type,
+      message,
+      ...options,
+    });
+  } catch (e) {
+    console.error("Failed to log activity:", e);
+  }
+}
+
 const http = httpRouter();
 
 // ============================================================================
@@ -35,10 +61,29 @@ http.route({
         );
       }
 
+      // Log thinking activity
+      await logActivity(ctx, "thinking", `Processing: "${userMessage.slice(0, 50)}${userMessage.length > 50 ? '...' : ''}"`, {
+        toolName: "ai_assistant",
+        conversationId: body.conversation_id,
+      });
+
       // Call the AI-powered action
       const result = await ctx.runAction(api.ai.askSalesforce, {
         userMessage,
         conversationHistory: body.conversation_history,
+      });
+
+      // Log success with action details
+      const actionType = result.action || "response";
+      const successMessage = actionType === "search" ? `Found results` :
+                            actionType === "query" ? `Retrieved data` :
+                            actionType === "create" ? `Created record` :
+                            actionType === "update" ? `Updated record` :
+                            `Responded`;
+
+      await logActivity(ctx, "success", successMessage, {
+        toolName: "ai_assistant",
+        conversationId: body.conversation_id,
       });
 
       // Log the tool call
@@ -59,6 +104,9 @@ http.route({
       });
     } catch (error: any) {
       console.error("AI assistant error:", error);
+      await logActivity(ctx, "error", `Error: ${error.message}`, {
+        toolName: "ai_assistant",
+      });
       return new Response(
         JSON.stringify({
           response: "I'm having trouble right now. Let me try again.",
@@ -92,11 +140,35 @@ http.route({
       // ElevenLabs sends tool parameters in the body
       const { query, object_type, limit } = body;
 
+      // Log searching activity
+      await logActivity(ctx, "searching", `Searching ${object_type || 'Salesforce'} for "${query}"`, {
+        toolName: "search_salesforce",
+        recordType: object_type,
+        conversationId: body.conversation_id,
+      });
+
       const result = await ctx.runAction(api.salesforce.searchRecords, {
         query: query || "",
         objectType: object_type,
         limit: limit || 10,
-      });
+      }) as { records: any[]; totalSize: number };
+
+      // Log found activity with record details
+      if (result.records && result.records.length > 0) {
+        const firstRecord = result.records[0];
+        await logActivity(ctx, "found", `Found ${result.totalSize} ${object_type || 'record'}${result.totalSize !== 1 ? 's' : ''}`, {
+          toolName: "search_salesforce",
+          recordId: firstRecord.Id,
+          recordName: firstRecord.Name,
+          recordType: object_type || firstRecord.attributes?.type,
+          conversationId: body.conversation_id,
+        });
+      } else {
+        await logActivity(ctx, "found", `No ${object_type || 'records'} found for "${query}"`, {
+          toolName: "search_salesforce",
+          conversationId: body.conversation_id,
+        });
+      }
 
       // Log the tool call
       if (body.conversation_id) {
@@ -116,6 +188,9 @@ http.route({
       });
     } catch (error: any) {
       console.error("search_salesforce error:", error);
+      await logActivity(ctx, "error", `Search failed: ${error.message}`, {
+        toolName: "search_salesforce",
+      });
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { "Content-Type": "application/json" } }
@@ -190,9 +265,26 @@ http.route({
       const object_type = body.object_type || body.objectType;
       const { object_type: _ot, objectType: _ot2, conversation_id: _cid, ...fields } = body;
 
+      // Log creating activity
+      const recordName = fields.Name || fields.Subject || fields.FirstName || 'new record';
+      await logActivity(ctx, "creating", `Creating ${object_type}: ${recordName}`, {
+        toolName: "create_record",
+        recordType: object_type,
+        conversationId: body.conversation_id,
+      });
+
       const result = await ctx.runAction(api.salesforce.createRecord, {
         objectType: object_type,
         fields: fields,
+      }) as { id: string; success: boolean };
+
+      // Log success
+      await logActivity(ctx, "success", `Created ${object_type} successfully`, {
+        toolName: "create_record",
+        recordId: result.id,
+        recordName: recordName,
+        recordType: object_type,
+        conversationId: body.conversation_id,
       });
 
       if (body.conversation_id) {
@@ -212,6 +304,9 @@ http.route({
       });
     } catch (error: any) {
       console.error("create_record error:", error);
+      await logActivity(ctx, "error", `Failed to create record: ${error.message}`, {
+        toolName: "create_record",
+      });
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { "Content-Type": "application/json" } }
@@ -238,10 +333,27 @@ http.route({
       const object_type = body.object_type || body.objectType;
       const { record_id: _rid, recordId: _rid2, object_type: _ot, objectType: _ot2, conversation_id: _cid, ...fields } = body;
 
+      // Log updating activity with what's being changed
+      const fieldNames = Object.keys(fields).join(', ');
+      await logActivity(ctx, "updating", `Updating ${object_type}: ${fieldNames}`, {
+        toolName: "update_record",
+        recordId: record_id,
+        recordType: object_type,
+        conversationId: body.conversation_id,
+      });
+
       const result = await ctx.runAction(api.salesforce.updateRecord, {
         recordId: record_id,
         objectType: object_type,
         fields: fields,
+      });
+
+      // Log success
+      await logActivity(ctx, "success", `Updated ${object_type} successfully`, {
+        toolName: "update_record",
+        recordId: record_id,
+        recordType: object_type,
+        conversationId: body.conversation_id,
       });
 
       if (body.conversation_id) {
@@ -261,6 +373,9 @@ http.route({
       });
     } catch (error: any) {
       console.error("update_record error:", error);
+      await logActivity(ctx, "error", `Failed to update record: ${error.message}`, {
+        toolName: "update_record",
+      });
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { "Content-Type": "application/json" } }
@@ -328,9 +443,23 @@ http.route({
       const body = await request.json();
       console.log("get_my_tasks called with:", body);
 
+      // Log searching activity
+      await logActivity(ctx, "searching", "Retrieving your tasks...", {
+        toolName: "get_my_tasks",
+        recordType: "Task",
+        conversationId: body.conversation_id,
+      });
+
       const result = await ctx.runAction(api.salesforce.getMyTasks, {
         status: body.status,
         dueDate: body.due_date,
+      }) as { tasks: any[]; count: number };
+
+      // Log found
+      await logActivity(ctx, "found", `Found ${result.count} task${result.count !== 1 ? 's' : ''}`, {
+        toolName: "get_my_tasks",
+        recordType: "Task",
+        conversationId: body.conversation_id,
       });
 
       if (body.conversation_id) {
@@ -350,6 +479,9 @@ http.route({
       });
     } catch (error: any) {
       console.error("get_my_tasks error:", error);
+      await logActivity(ctx, "error", `Failed to get tasks: ${error.message}`, {
+        toolName: "get_my_tasks",
+      });
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { "Content-Type": "application/json" } }
@@ -371,9 +503,25 @@ http.route({
       const body = await request.json();
       console.log("get_my_pipeline called with:", body);
 
+      // Log searching activity
+      await logActivity(ctx, "searching", "Retrieving your pipeline...", {
+        toolName: "get_my_pipeline",
+        recordType: "Opportunity",
+        conversationId: body.conversation_id,
+      });
+
       const result = await ctx.runAction(api.salesforce.getMyOpportunities, {
         stage: body.stage,
         closeDate: body.close_date,
+      }) as { opportunities: any[]; summary: string; totalAmount?: number };
+
+      // Log found with pipeline value
+      const oppCount = result.opportunities?.length || 0;
+      const totalVal = result.totalAmount ? `$${(result.totalAmount / 1000).toFixed(0)}k` : '';
+      await logActivity(ctx, "found", `Found ${oppCount} opportunit${oppCount !== 1 ? 'ies' : 'y'} ${totalVal}`, {
+        toolName: "get_my_pipeline",
+        recordType: "Opportunity",
+        conversationId: body.conversation_id,
       });
 
       if (body.conversation_id) {
@@ -393,6 +541,9 @@ http.route({
       });
     } catch (error: any) {
       console.error("get_my_pipeline error:", error);
+      await logActivity(ctx, "error", `Failed to get pipeline: ${error.message}`, {
+        toolName: "get_my_pipeline",
+      });
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 500, headers: { "Content-Type": "application/json" } }
@@ -473,7 +624,7 @@ http.route({
 
 /**
  * Twilio incoming call webhook
- * Returns TwiML to connect to ElevenLabs
+ * Performs Caller ID lookup to identify user, then connects to ElevenLabs
  */
 http.route({
   path: "/webhooks/twilio/incoming",
@@ -487,18 +638,70 @@ http.route({
 
       console.log("Incoming call:", { callSid, from, to });
 
-      // Log conversation start
+      // =========================================================
+      // CALLER ID LOOKUP - Identify user by their phone number
+      // =========================================================
+      const user = await ctx.runQuery(internal.users.getUserByPhoneInternal, {
+        phone: from,
+      });
+
+      // If caller is not registered, reject the call with instructions
+      if (!user) {
+        console.log("Unregistered caller:", from);
+        const rejectTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">
+    Sorry, this phone number is not registered with Talk CRM.
+    Please visit talk crm dot com to create an account and verify your phone number.
+    Goodbye.
+  </Say>
+  <Hangup />
+</Response>`;
+        return new Response(rejectTwiml, {
+          status: 200,
+          headers: { "Content-Type": "application/xml" },
+        });
+      }
+
+      // Check if user account is active
+      if (user.status !== "active") {
+        const suspendedTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">
+    Your Talk CRM account is currently ${user.status}.
+    Please contact support for assistance.
+    Goodbye.
+  </Say>
+  <Hangup />
+</Response>`;
+        return new Response(suspendedTwiml, {
+          status: 200,
+          headers: { "Content-Type": "application/xml" },
+        });
+      }
+
+      console.log("Authenticated user:", { userId: user._id, name: user.name, email: user.email });
+
+      // Log conversation start with user ID
       await ctx.runMutation(internal.conversations.startConversation, {
         conversationId: callSid,
         callerPhone: from,
+        userId: user._id,
+      });
+
+      // Update user's last login
+      await ctx.runMutation(internal.users.updateLastLogin, {
+        userId: user._id,
       });
 
       // Get the ElevenLabs agent ID from environment
       const agentId = process.env.ELEVENLABS_AGENT_ID;
 
       // Return TwiML to connect to ElevenLabs Conversational AI
+      // Include user context in the connection (ElevenLabs can use this)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say voice="alice">Welcome back, ${user.name.split(" ")[0]}. Connecting you to your assistant.</Say>
   <Connect>
     <ConversationalAi url="wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}" />
   </Connect>
@@ -512,13 +715,253 @@ http.route({
       console.error("Twilio webhook error:", error);
       const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Sorry, there was an error connecting your call. Please try again later.</Say>
+  <Say voice="alice">Sorry, there was an error connecting your call. Please try again later.</Say>
   <Hangup />
 </Response>`;
       return new Response(errorTwiml, {
         status: 200,
         headers: { "Content-Type": "application/xml" },
       });
+    }
+  }),
+});
+
+// ============================================================================
+// USER AUTHENTICATION API
+// ============================================================================
+
+/**
+ * Start signup - sends verification code to phone
+ * POST /api/auth/signup/start
+ * Body: { email, name, phone }
+ */
+http.route({
+  path: "/api/auth/signup/start",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { email, name, phone } = body;
+
+      if (!email || !name || !phone) {
+        return new Response(
+          JSON.stringify({ error: "Email, name, and phone are required" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if email already exists
+      const existingUser = await ctx.runQuery(api.users.getUserByEmail, { email });
+      if (existingUser) {
+        return new Response(
+          JSON.stringify({ error: "An account with this email already exists" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Start verification (creates code + sends SMS)
+      const result = await ctx.runAction(api.twilio.startVerification, {
+        phone,
+        email,
+        name,
+      });
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("Signup start error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * Complete signup/login - verify code
+ * POST /api/auth/verify
+ * Body: { phone, code }
+ */
+http.route({
+  path: "/api/auth/verify",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { phone, code } = body;
+
+      if (!phone || !code) {
+        return new Response(
+          JSON.stringify({ error: "Phone and code are required" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const result = await ctx.runAction(api.twilio.completeVerification, {
+        phone,
+        code,
+      });
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("Verification error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * Login with phone - sends verification code
+ * POST /api/auth/login/start
+ * Body: { phone }
+ */
+http.route({
+  path: "/api/auth/login/start",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { phone } = body;
+
+      if (!phone) {
+        return new Response(
+          JSON.stringify({ error: "Phone is required" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if user exists with this phone
+      const existingUser = await ctx.runQuery(api.users.getUserByPhone, { phone });
+      if (!existingUser) {
+        return new Response(
+          JSON.stringify({ error: "No account found with this phone number. Please sign up first." }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Start verification for existing user
+      const result = await ctx.runAction(api.twilio.startVerification, {
+        phone,
+      });
+
+      return new Response(JSON.stringify({
+        ...result,
+        userId: existingUser._id,
+        name: existingUser.name,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("Login start error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * Add phone to existing user
+ * POST /api/auth/add-phone
+ * Body: { userId, phone }
+ */
+http.route({
+  path: "/api/auth/add-phone",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { userId, phone } = body;
+
+      if (!userId || !phone) {
+        return new Response(
+          JSON.stringify({ error: "userId and phone are required" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Start verification for adding phone
+      const verification = await ctx.runMutation(api.users.startPhoneVerification, {
+        phone,
+        userId,
+      });
+
+      // Send SMS
+      const smsResult = await ctx.runAction(api.twilio.sendVerificationSMS, {
+        phone: verification.phone,
+        code: verification.code,
+      });
+
+      return new Response(JSON.stringify({
+        success: true,
+        phone: verification.phone,
+        expiresAt: verification.expiresAt,
+        smsMode: smsResult.mode,
+        ...(smsResult.mode === "dev" ? { code: verification.code } : {}),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("Add phone error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * Get current user profile
+ * GET /api/user?userId=xxx
+ */
+http.route({
+  path: "/api/user",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get("userId");
+
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: "userId query parameter required" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const user = await ctx.runQuery(api.users.getUser, {
+        userId: userId as any
+      });
+
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: "User not found" }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(JSON.stringify(user), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
     }
   }),
 });
