@@ -62,13 +62,32 @@ export default defineSchema({
     callerPhone: v.optional(v.string()),
     startTime: v.number(),
     endTime: v.optional(v.number()),
+    durationSeconds: v.optional(v.number()), // Call duration
     status: v.union(v.literal("active"), v.literal("completed"), v.literal("failed")),
     transcript: v.optional(v.string()),
     summary: v.optional(v.string()),
     salesforceRecordsAccessed: v.array(v.string()), // Record IDs accessed
     salesforceRecordsModified: v.array(v.string()), // Record IDs created/updated
+    // Recording reference
+    recordingId: v.optional(v.id("recordings")),
   })
     .index("by_conversation_id", ["conversationId"])
+    .index("by_user", ["userId"]),
+
+  // Call recordings stored in Convex file storage
+  recordings: defineTable({
+    conversationId: v.string(), // Link to conversation
+    userId: v.optional(v.id("users")),
+    fileId: v.id("_storage"), // Convex file storage ID
+    fileName: v.string(),
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    durationSeconds: v.optional(v.number()),
+    source: v.union(v.literal("twilio"), v.literal("elevenlabs"), v.literal("upload")),
+    sourceUrl: v.optional(v.string()), // Original URL from provider
+    createdAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
     .index("by_user", ["userId"]),
 
   // Log individual tool calls for debugging/audit

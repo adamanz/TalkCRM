@@ -620,13 +620,29 @@ http.route({
           ? (startTimeUnixSecs + callDurationSecs) * 1000
           : Date.now();
 
-      await ctx.runMutation(internal.conversations.completeConversation, {
+      // Complete the conversation and get user info for recording
+      const result = await ctx.runMutation(internal.conversations.completeConversation, {
         conversationId,
         transcript,
         summary,
         startTime,
         endTime,
+        durationSeconds: callDurationSecs,
       });
+
+      // Check for recording URL in ElevenLabs data and fetch it
+      const recordingUrl: string | undefined = data?.recording_url || data?.audio_url;
+      if (recordingUrl) {
+        // Fetch and store the recording asynchronously
+        ctx.runAction(api.recordings.fetchFromElevenLabs, {
+          conversationId,
+          audioUrl: recordingUrl,
+          userId: result.userId,
+          durationSeconds: callDurationSecs,
+        }).catch((err: Error) => {
+          console.error("Failed to fetch ElevenLabs recording:", err);
+        });
+      }
 
       return new Response(JSON.stringify({ status: "received" }), {
         status: 200,
@@ -645,6 +661,55 @@ http.route({
 // ============================================================================
 // TWILIO WEBHOOKS
 // ============================================================================
+
+/**
+ * Twilio recording status callback
+ * Called when a recording is ready to be downloaded
+ */
+http.route({
+  path: "/webhooks/twilio/recording",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const formData = await request.formData();
+      const recordingSid = formData.get("RecordingSid") as string;
+      const recordingUrl = formData.get("RecordingUrl") as string;
+      const callSid = formData.get("CallSid") as string;
+      const recordingDuration = parseInt(formData.get("RecordingDuration") as string || "0", 10);
+      const recordingStatus = formData.get("RecordingStatus") as string;
+
+      console.log("Twilio recording callback:", {
+        recordingSid,
+        callSid,
+        recordingStatus,
+        recordingDuration,
+      });
+
+      // Only process completed recordings
+      if (recordingStatus !== "completed" || !recordingUrl) {
+        return new Response("OK", { status: 200 });
+      }
+
+      // Get conversation to find user ID
+      const conversation = await ctx.runQuery(api.conversations.getConversation, {
+        conversationId: callSid,
+      });
+
+      // Fetch and store the recording
+      await ctx.runAction(api.recordings.fetchFromTwilio, {
+        conversationId: callSid,
+        recordingUrl,
+        userId: conversation?.userId ?? undefined,
+        durationSeconds: recordingDuration,
+      });
+
+      return new Response("OK", { status: 200 });
+    } catch (error: any) {
+      console.error("Twilio recording webhook error:", error);
+      return new Response("Error", { status: 500 });
+    }
+  }),
+});
 
 /**
  * Twilio incoming call webhook

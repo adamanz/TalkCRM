@@ -47,9 +47,13 @@ export const completeConversation = internalMutation({
     summary: v.optional(v.string()),
     startTime: v.optional(v.number()),
     endTime: v.number(),
+    durationSeconds: v.optional(v.number()),
     callerPhone: v.optional(v.string()),
   },
-  returns: v.null(),
+  returns: v.object({
+    conversationId: v.id("conversations"),
+    userId: v.optional(v.id("users")),
+  }),
   handler: async (ctx, args) => {
     const conversation = await ctx.db
       .query("conversations")
@@ -65,25 +69,27 @@ export const completeConversation = internalMutation({
         summary: args.summary,
         startTime: args.startTime ?? conversation.startTime,
         endTime: args.endTime,
+        durationSeconds: args.durationSeconds,
         callerPhone: args.callerPhone ?? conversation.callerPhone,
       });
-      return null;
+      return { conversationId: conversation._id, userId: conversation.userId };
     }
 
     // If we didn't see a "start" event (e.g. when using an ElevenLabs-managed phone number),
     // create the conversation record here.
-    await ctx.db.insert("conversations", {
+    const newId = await ctx.db.insert("conversations", {
       conversationId: args.conversationId,
       callerPhone: args.callerPhone,
       startTime: args.startTime ?? args.endTime,
       endTime: args.endTime,
+      durationSeconds: args.durationSeconds,
       status: "completed",
       transcript: args.transcript,
       summary: args.summary,
       salesforceRecordsAccessed: [],
       salesforceRecordsModified: [],
     });
-    return null;
+    return { conversationId: newId, userId: undefined };
   },
 });
 
