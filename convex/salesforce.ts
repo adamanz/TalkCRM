@@ -1,6 +1,34 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+
+// ============================================================================
+// PUBLIC QUERIES
+// ============================================================================
+
+/**
+ * Check if a user has Salesforce connected
+ */
+export const getSalesforceStatus = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const auth = await ctx.db
+      .query("salesforceAuth")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!auth) {
+      return { connected: false };
+    }
+
+    return {
+      connected: true,
+      instanceUrl: auth.instanceUrl,
+      expiresAt: auth.expiresAt,
+      isExpired: auth.expiresAt < Date.now(),
+    };
+  },
+});
 
 // ============================================================================
 // SALESFORCE API HELPERS

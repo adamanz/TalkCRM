@@ -1056,11 +1056,54 @@ http.route({
 });
 
 // ============================================================================
-// SALESFORCE OAUTH (Package Flow)
+// SALESFORCE OAUTH (Multi-tenant - works from web app or Salesforce LWC)
 // ============================================================================
 
 /**
- * Initiate OAuth flow from Salesforce LWC
+ * Web-based OAuth initiation (for self-service signup)
+ * Called from the TalkCRM web app to connect a user's Salesforce
+ */
+http.route({
+  path: "/auth/salesforce/connect",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get("user_id");
+      const returnUrl = url.searchParams.get("return_url") || process.env.TALKCRM_WEB_URL || "";
+
+      const clientId = process.env.SALESFORCE_CLIENT_ID!;
+      const redirectUri = process.env.SALESFORCE_REDIRECT_URI!;
+
+      // Store return info in state
+      const state = btoa(JSON.stringify({
+        source: "web",
+        userId,
+        returnUrl,
+      }));
+
+      // Build Salesforce OAuth URL
+      const loginDomain = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
+      const authUrl = new URL(`${loginDomain}/services/oauth2/authorize`);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("scope", "api refresh_token");
+      authUrl.searchParams.set("state", state);
+
+      return new Response(null, {
+        status: 302,
+        headers: { Location: authUrl.toString() },
+      });
+    } catch (error: any) {
+      console.error("OAuth connect error:", error);
+      return new Response(`Error: ${error.message}`, { status: 500 });
+    }
+  }),
+});
+
+/**
+ * Initiate OAuth flow from Salesforce LWC (package flow)
  * Called by the TalkCRM Setup wizard in the Salesforce package
  */
 http.route({
@@ -1081,6 +1124,7 @@ http.route({
 
       // Store the callback URL in state parameter (base64 encoded)
       const state = btoa(JSON.stringify({
+        source: "salesforce",
         callbackUrl,
         instanceUrl,
       }));
@@ -1206,18 +1250,31 @@ http.route({
         salesforceUserId: userInfo.user_id,
       });
 
-      // Parse state to get callback URL
-      let salesforceUrl = "";
+      // Parse state to determine redirect destination
+      let stateData: any = {};
       if (state) {
         try {
-          const stateData = JSON.parse(atob(state));
-          salesforceUrl = stateData.callbackUrl || "";
+          stateData = JSON.parse(atob(state));
         } catch (e) {
           console.error("Failed to parse state:", e);
         }
       }
 
-      // Return an HTML page that stores data and redirects back to Salesforce
+      // Handle different OAuth sources
+      if (stateData.source === "web") {
+        // Web app flow - redirect back to web app
+        const returnUrl = stateData.returnUrl || "/";
+        const separator = returnUrl.includes("?") ? "&" : "?";
+        const redirectUrl = `${returnUrl}${separator}sf_connected=true&user_id=${userId}`;
+
+        return new Response(null, {
+          status: 302,
+          headers: { Location: redirectUrl },
+        });
+      }
+
+      // Salesforce LWC flow - show success page and redirect back
+      const salesforceUrl = stateData.callbackUrl || "";
       const redirectUrl = salesforceUrl ? `${salesforceUrl}#talkcrm_user_id=${userId}&talkcrm_email=${encodeURIComponent(userInfo.email)}` : "";
 
       const html = `<!DOCTYPE html>

@@ -742,7 +742,17 @@ function Dashboard({ userId }: { userId: Id<"users"> }) {
   const stats = useQuery(api.conversations.getConversationStats, { userId });
   const conversations = useQuery(api.conversations.listConversations, { limit: 10, userId });
   const activities = useQuery(api.activities.getRecentActivities, { limit: 10 });
+  const sfStatus = useQuery(api.salesforce.getSalesforceStatus, { userId });
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
+
+  // Check for OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("sf_connected") === "true") {
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   // Auto-clear highlight after 5 seconds
   useEffect(() => {
@@ -752,8 +762,57 @@ function Dashboard({ userId }: { userId: Id<"users"> }) {
     }
   }, [highlightedRecordId]);
 
+  const convexUrl = import.meta.env.VITE_CONVEX_URL || "";
+  const httpUrl = convexUrl.replace(".cloud", ".site");
+
+  const connectSalesforce = () => {
+    const returnUrl = encodeURIComponent(window.location.href);
+    window.location.href = `${httpUrl}/auth/salesforce/connect?user_id=${userId}&return_url=${returnUrl}`;
+  };
+
   return (
     <div className="space-y-8">
+      {/* Salesforce Connection Status */}
+      {sfStatus && !sfStatus.connected && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center text-2xl">
+                ☁️
+              </div>
+              <div>
+                <h3 className="font-semibold text-amber-900 dark:text-amber-100">Connect Salesforce</h3>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Link your Salesforce account to start using voice commands
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={connectSalesforce}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            >
+              Connect Salesforce
+            </button>
+          </div>
+        </div>
+      )}
+
+      {sfStatus?.connected && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center text-lg">
+              ✓
+            </div>
+            <div>
+              <span className="font-medium text-green-900 dark:text-green-100">Salesforce Connected</span>
+              <span className="text-sm text-green-700 dark:text-green-300 ml-2">
+                {sfStatus.instanceUrl?.replace("https://", "")}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Real-time Activity Feed - Prominent at top */}
       <ActivityFeed
         activities={activities || []}
