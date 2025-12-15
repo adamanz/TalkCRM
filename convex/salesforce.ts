@@ -175,6 +175,48 @@ export const updateAuth = internalMutation({
   },
 });
 
+/**
+ * Update Salesforce auth for a specific user (multi-tenant package flow)
+ */
+export const updateAuthForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    accessToken: v.string(),
+    refreshToken: v.string(),
+    instanceUrl: v.string(),
+    expiresAt: v.number(),
+    salesforceUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Find existing auth for this user
+    const existing = await ctx.db
+      .query("salesforceAuth")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (existing) {
+      // Update existing auth
+      await ctx.db.patch(existing._id, {
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken,
+        instanceUrl: args.instanceUrl,
+        expiresAt: args.expiresAt,
+        salesforceUserId: args.salesforceUserId,
+      });
+    } else {
+      // Create new auth for this user
+      await ctx.db.insert("salesforceAuth", {
+        userId: args.userId,
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken,
+        instanceUrl: args.instanceUrl,
+        expiresAt: args.expiresAt,
+        salesforceUserId: args.salesforceUserId,
+      });
+    }
+  },
+});
+
 // ============================================================================
 // SALESFORCE ACTIONS (Called by ElevenLabs Server Tools)
 // ============================================================================

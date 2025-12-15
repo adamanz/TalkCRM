@@ -257,6 +257,43 @@ export const updateLastLogin = internalMutation({
   },
 });
 
+/**
+ * Create a new user without phone (used during OAuth flow)
+ * Phone will be added in step 2 of setup
+ */
+export const createUserWithoutPhone = internalMutation({
+  args: {
+    email: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedEmail = args.email.toLowerCase();
+
+    // Check if email already exists
+    const existingEmail = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .first();
+
+    if (existingEmail) {
+      // Return existing user instead of creating new one
+      return { userId: existingEmail._id, existing: true };
+    }
+
+    // Create user without phone
+    const userId = await ctx.db.insert("users", {
+      email: normalizedEmail,
+      name: args.name,
+      verifiedPhones: [], // Empty - will add phone in step 2
+      status: "pending", // Pending until phone verified
+      createdAt: Date.now(),
+      tier: "free",
+    });
+
+    return { userId, existing: false };
+  },
+});
+
 // ============================================================================
 // PHONE VERIFICATION
 // ============================================================================

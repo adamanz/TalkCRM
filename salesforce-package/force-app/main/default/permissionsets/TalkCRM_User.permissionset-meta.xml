@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>TalkCRM User</label>
+    <description>Grants access to TalkCRM setup tab and Apex controller</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <classAccesses>
+        <apexClass>TalkCrmController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <tabSettings>
+        <tab>TalkCRM_Setup</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+</PermissionSet>

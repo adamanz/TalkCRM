@@ -31,6 +31,30 @@ async function logActivity(
 const http = httpRouter();
 
 // ============================================================================
+// CORS HELPERS
+// ============================================================================
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function corsResponse(body: any, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+}
+
+function corsOptionsResponse() {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
+// ============================================================================
 // AI-POWERED SALESFORCE ASSISTANT (Primary Tool)
 // Single intelligent endpoint that interprets natural language using Claude
 // ============================================================================
@@ -781,6 +805,15 @@ http.route({
 });
 
 /**
+ * Complete signup/login - verify code (OPTIONS preflight)
+ */
+http.route({
+  path: "/api/auth/verify",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
  * Complete signup/login - verify code
  * POST /api/auth/verify
  * Body: { phone, code }
@@ -794,10 +827,7 @@ http.route({
       const { phone, code } = body;
 
       if (!phone || !code) {
-        return new Response(
-          JSON.stringify({ error: "Phone and code are required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "Phone and code are required" }, 400);
       }
 
       const result = await ctx.runAction(api.twilio.completeVerification, {
@@ -805,16 +835,10 @@ http.route({
         code,
       });
 
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return corsResponse(result);
     } catch (error: any) {
       console.error("Verification error:", error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+      return corsResponse({ error: error.message }, 400);
     }
   }),
 });
@@ -872,6 +896,15 @@ http.route({
 });
 
 /**
+ * Add phone to existing user (OPTIONS preflight)
+ */
+http.route({
+  path: "/api/auth/add-phone",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
  * Add phone to existing user
  * POST /api/auth/add-phone
  * Body: { userId, phone }
@@ -885,10 +918,7 @@ http.route({
       const { userId, phone } = body;
 
       if (!userId || !phone) {
-        return new Response(
-          JSON.stringify({ error: "userId and phone are required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "userId and phone are required" }, 400);
       }
 
       // Start verification for adding phone
@@ -903,22 +933,16 @@ http.route({
         code: verification.code,
       });
 
-      return new Response(JSON.stringify({
+      return corsResponse({
         success: true,
         phone: verification.phone,
         expiresAt: verification.expiresAt,
         smsMode: smsResult.mode,
         ...(smsResult.mode === "dev" ? { code: verification.code } : {}),
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
       });
     } catch (error: any) {
       console.error("Add phone error:", error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      return corsResponse({ error: error.message }, 500);
     }
   }),
 });
@@ -967,11 +991,61 @@ http.route({
 });
 
 // ============================================================================
-// SALESFORCE OAUTH CALLBACK
+// SALESFORCE OAUTH (Package Flow)
 // ============================================================================
 
 /**
+ * Initiate OAuth flow from Salesforce LWC
+ * Called by the TalkCRM Setup wizard in the Salesforce package
+ */
+http.route({
+  path: "/auth/salesforce/initiate",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const callbackUrl = url.searchParams.get("callback_url");
+      const instanceUrl = url.searchParams.get("instance_url");
+
+      if (!callbackUrl) {
+        return new Response("Missing callback_url parameter", { status: 400 });
+      }
+
+      const clientId = process.env.SALESFORCE_CLIENT_ID!;
+      const redirectUri = process.env.SALESFORCE_REDIRECT_URI!;
+
+      // Store the callback URL in state parameter (base64 encoded)
+      const state = btoa(JSON.stringify({
+        callbackUrl,
+        instanceUrl,
+      }));
+
+      // Build Salesforce OAuth URL (use My Domain URL for org-specific login)
+      const loginDomain = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
+      const authUrl = new URL(`${loginDomain}/services/oauth2/authorize`);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("scope", "api refresh_token");
+      authUrl.searchParams.set("state", state);
+
+      // Redirect to Salesforce OAuth
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: authUrl.toString(),
+        },
+      });
+    } catch (error: any) {
+      console.error("OAuth initiate error:", error);
+      return new Response(`Error: ${error.message}`, { status: 500 });
+    }
+  }),
+});
+
+/**
  * OAuth callback from Salesforce
+ * Creates/updates user and redirects back to Salesforce LWC
  */
 http.route({
   path: "/auth/salesforce/callback",
@@ -980,9 +1054,25 @@ http.route({
     try {
       const url = new URL(request.url);
       const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const error = url.searchParams.get("error");
+      const errorDescription = url.searchParams.get("error_description");
+
+      // Log all params for debugging
+      console.log("OAuth callback params:", {
+        hasCode: !!code,
+        hasState: !!state,
+        error,
+        errorDescription,
+        fullUrl: request.url,
+      });
+
+      if (error) {
+        return new Response(`Salesforce OAuth Error: ${error} - ${errorDescription || 'No description'}`, { status: 400 });
+      }
 
       if (!code) {
-        return new Response("Missing authorization code", { status: 400 });
+        return new Response(`Missing authorization code. URL: ${request.url}`, { status: 400 });
       }
 
       const clientId = process.env.SALESFORCE_CLIENT_ID!;
@@ -990,8 +1080,9 @@ http.route({
       const redirectUri = process.env.SALESFORCE_REDIRECT_URI!;
 
       // Exchange code for tokens
+      const loginDomain = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
       const tokenResponse = await fetch(
-        "https://login.salesforce.com/services/oauth2/token",
+        `${loginDomain}/services/oauth2/token`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1013,20 +1104,92 @@ http.route({
 
       const tokens = await tokenResponse.json();
 
-      // Store tokens in database
-      await ctx.runMutation(internal.salesforce.updateAuth, {
+      // Get user info from Salesforce
+      const userInfoResponse = await fetch(
+        `${tokens.instance_url}/services/oauth2/userinfo`,
+        {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        }
+      );
+      const userInfo = await userInfoResponse.json();
+
+      // Find or create TalkCRM user by email
+      let user = await ctx.runQuery(api.users.getUserByEmail, {
+        email: userInfo.email,
+      });
+
+      let userId: string;
+
+      if (!user) {
+        // Create new user (without phone - will add in step 2)
+        const result = await ctx.runMutation(internal.users.createUserWithoutPhone, {
+          email: userInfo.email,
+          name: userInfo.name || userInfo.preferred_username || "User",
+        });
+        userId = result.userId;
+      } else {
+        userId = user._id;
+      }
+
+      // Store Salesforce auth tokens for this user
+      await ctx.runMutation(internal.salesforce.updateAuthForUser, {
+        userId: userId as any,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         instanceUrl: tokens.instance_url,
         expiresAt: Date.now() + 7200 * 1000, // 2 hours
+        salesforceUserId: userInfo.user_id,
       });
 
-      // Redirect to success page
-      return new Response(null, {
-        status: 302,
-        headers: {
-          Location: "/?auth=success",
-        },
+      // Parse state to get callback URL
+      let salesforceUrl = "";
+      if (state) {
+        try {
+          const stateData = JSON.parse(atob(state));
+          salesforceUrl = stateData.callbackUrl || "";
+        } catch (e) {
+          console.error("Failed to parse state:", e);
+        }
+      }
+
+      // Return an HTML page that stores data and redirects back to Salesforce
+      const redirectUrl = salesforceUrl ? `${salesforceUrl}#talkcrm_user_id=${userId}&talkcrm_email=${encodeURIComponent(userInfo.email)}` : "";
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>TalkCRM - Connected!</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card { background: white; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.2); max-width: 400px; }
+    h1 { color: #22c55e; margin-bottom: 10px; }
+    p { color: #666; margin-bottom: 20px; }
+    .btn { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn:hover { background: #2563eb; }
+    .info { background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; font-size: 14px; }
+    .info strong { color: #1e40af; }
+    .copy-btn { background: #e5e7eb; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>✓ Connected!</h1>
+    <p>Your Salesforce account is now linked to TalkCRM.</p>
+    <div class="info">
+      <strong>Email:</strong> ${userInfo.email}<br><br>
+      <strong>Your TalkCRM ID:</strong><br>
+      <code id="userId">${userId}</code>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText('${userId}')">Copy</button>
+    </div>
+    <p style="font-size: 13px; color: #666;">Copy your ID above, then click continue and paste it when prompted.</p>
+    <a href="${redirectUrl || '#'}" class="btn">Continue to Phone Setup →</a>
+  </div>
+</body>
+</html>`;
+
+      return new Response(html, {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
       });
     } catch (error: any) {
       console.error("OAuth callback error:", error);

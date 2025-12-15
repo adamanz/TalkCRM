@@ -1,0 +1,128 @@
+<template>
+    <lightning-card title="TalkCRM Setup" icon-name="custom:custom14">
+        <!-- Step Indicator -->
+        <div class="slds-p-horizontal_medium">
+            <lightning-progress-indicator current-step={currentStep} type="path" variant="base">
+                <lightning-progress-step label="Connect Salesforce" value="1"></lightning-progress-step>
+                <lightning-progress-step label="Verify Phone" value="2"></lightning-progress-step>
+                <lightning-progress-step label="Ready!" value="3"></lightning-progress-step>
+            </lightning-progress-indicator>
+        </div>
+
+        <div class="slds-p-around_medium">
+            <!-- Step 1: Connect Salesforce -->
+            <template lwc:if={isStep1}>
+                <div class="slds-text-align_center slds-p-around_large">
+                    <lightning-icon icon-name="standard:connected_apps" size="large" class="slds-m-bottom_medium"></lightning-icon>
+                    <h2 class="slds-text-heading_medium slds-m-bottom_small">Connect Your Salesforce Account</h2>
+                    <p class="slds-text-body_regular slds-m-bottom_large">
+                        TalkCRM needs permission to access your Salesforce data so you can manage your CRM by voice.
+                    </p>
+
+                    <template lwc:if={isConnected}>
+                        <div class="slds-box slds-theme_success slds-m-bottom_medium">
+                            <lightning-icon icon-name="utility:success" variant="inverse" size="small" class="slds-m-right_x-small"></lightning-icon>
+                            Connected as: <strong>{userEmail}</strong>
+                        </div>
+                        <lightning-button variant="brand" label="Continue to Phone Setup" onclick={goToStep2}></lightning-button>
+                    </template>
+
+                    <template lwc:else>
+                        <lightning-button variant="brand" label="Connect Salesforce" onclick={startOAuth} disabled={isLoading}></lightning-button>
+                        <template lwc:if={isLoading}>
+                            <lightning-spinner alternative-text="Loading" size="small" class="slds-m-left_medium"></lightning-spinner>
+                        </template>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Step 2: Phone Verification -->
+            <template lwc:if={isStep2}>
+                <div class="slds-text-align_center slds-p-around_large">
+                    <lightning-icon icon-name="standard:call" size="large" class="slds-m-bottom_medium"></lightning-icon>
+                    <h2 class="slds-text-heading_medium slds-m-bottom_small">Verify Your Phone Number</h2>
+                    <p class="slds-text-body_regular slds-m-bottom_large">
+                        Add your phone number to call TalkCRM. We'll send a verification code.
+                    </p>
+
+                    <template lwc:if={showPhoneInput}>
+                        <div class="slds-form-element slds-m-bottom_medium" style="max-width: 300px; margin: 0 auto;">
+                            <lightning-input
+                                type="tel"
+                                label="Phone Number"
+                                placeholder="+1 (555) 123-4567"
+                                value={phoneNumber}
+                                onchange={handlePhoneChange}
+                                required>
+                            </lightning-input>
+                        </div>
+                        <lightning-button variant="brand" label="Send Verification Code" onclick={handleSendVerificationCode} disabled={isLoading}></lightning-button>
+                    </template>
+
+                    <template lwc:if={showCodeInput}>
+                        <div class="slds-box slds-theme_shade slds-m-bottom_medium">
+                            <p>Code sent to: <strong>{phoneNumber}</strong></p>
+                        </div>
+                        <div class="slds-form-element slds-m-bottom_medium" style="max-width: 200px; margin: 0 auto;">
+                            <lightning-input
+                                type="text"
+                                label="Verification Code"
+                                placeholder="123456"
+                                value={verificationCode}
+                                onchange={handleCodeChange}
+                                maxlength="6"
+                                required>
+                            </lightning-input>
+                        </div>
+                        <lightning-button variant="brand" label="Verify Code" onclick={handleVerifyCode} disabled={isLoading}></lightning-button>
+                        <lightning-button variant="base" label="Resend Code" onclick={handleSendVerificationCode} disabled={isLoading} class="slds-m-left_small"></lightning-button>
+                    </template>
+
+                    <template lwc:if={isLoading}>
+                        <lightning-spinner alternative-text="Loading" size="small" class="slds-m-top_medium"></lightning-spinner>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Step 3: Complete -->
+            <template lwc:if={isStep3}>
+                <div class="slds-text-align_center slds-p-around_large">
+                    <lightning-icon icon-name="action:approval" size="large" class="slds-m-bottom_medium"></lightning-icon>
+                    <h2 class="slds-text-heading_medium slds-m-bottom_small">You're All Set!</h2>
+                    <p class="slds-text-body_regular slds-m-bottom_large">
+                        TalkCRM is ready to use. Call the number below to start managing your Salesforce by voice.
+                    </p>
+
+                    <div class="slds-box slds-theme_default slds-m-bottom_large" style="max-width: 400px; margin: 0 auto;">
+                        <h3 class="slds-text-heading_small slds-m-bottom_small">Call TalkCRM</h3>
+                        <p class="slds-text-heading_large slds-text-color_success">
+                            <lightning-icon icon-name="utility:call" size="small" class="slds-m-right_x-small"></lightning-icon>
+                            +1 (646) 600-5041
+                        </p>
+                        <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
+                            Registered phone: {phoneNumber}
+                        </p>
+                    </div>
+
+                    <div class="slds-box slds-theme_shade" style="max-width: 500px; margin: 0 auto;">
+                        <h4 class="slds-text-title_bold slds-m-bottom_small">Try saying:</h4>
+                        <ul class="slds-list_dotted slds-text-align_left">
+                            <li>"What's in my pipeline?"</li>
+                            <li>"Find the Acme account"</li>
+                            <li>"Create a task to call John tomorrow"</li>
+                            <li>"Update the Acme deal to Closed Won"</li>
+                        </ul>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Error Display -->
+            <template lwc:if={errorMessage}>
+                <div class="slds-notify slds-notify_alert slds-alert_error slds-m-top_medium" role="alert">
+                    <lightning-icon icon-name="utility:error" variant="inverse" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                    {errorMessage}
+                </div>
+            </template>
+        </div>
+    </lightning-card>
+</template>

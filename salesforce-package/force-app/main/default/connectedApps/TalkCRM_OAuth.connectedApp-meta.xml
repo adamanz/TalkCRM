@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ConnectedApp xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>TalkCRM OAuth</label>
+    <contactEmail>a@thesimple.co</contactEmail>
+    <oauthConfig>
+        <callbackUrl>https://gregarious-crocodile-506.convex.site/auth/salesforce/callback</callbackUrl>
+        <scopes>Api</scopes>
+        <scopes>RefreshToken</scopes>
+    </oauthConfig>
+</ConnectedApp>
