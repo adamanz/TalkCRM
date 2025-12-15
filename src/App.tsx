@@ -84,6 +84,9 @@ export default function App() {
 
 function AppContent() {
   const { user, isLoading } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return localStorage.getItem("talkcrm_onboarding_complete") !== "true";
+  });
 
   if (isLoading) {
     return (
@@ -102,12 +105,292 @@ function AppContent() {
     return <AuthPage />;
   }
 
+  // Show onboarding for new users
+  if (showOnboarding) {
+    return (
+      <OnboardingFlow
+        user={user}
+        onComplete={() => {
+          localStorage.setItem("talkcrm_onboarding_complete", "true");
+          setShowOnboarding(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <Header user={user} />
       <main className="max-w-7xl mx-auto px-4 py-8">
         <Dashboard userId={user._id} />
       </main>
+    </div>
+  );
+}
+
+// ============================================================================
+// ONBOARDING FLOW - Guide new users through setup
+// ============================================================================
+
+function OnboardingFlow({ user, onComplete }: { user: User; onComplete: () => void }) {
+  const [step, setStep] = useState(1);
+  const totalSteps = 4;
+
+  const nextStep = () => {
+    if (step < totalSteps) {
+      setStep(step + 1);
+    } else {
+      onComplete();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
+        {/* Progress indicator */}
+        <div className="flex justify-center mb-8">
+          {[1, 2, 3, 4].map((s) => (
+            <div key={s} className="flex items-center">
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                  s <= step
+                    ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white"
+                    : "bg-white/20 text-white/50"
+                }`}
+              >
+                {s}
+              </div>
+              {s < 4 && (
+                <div
+                  className={`w-12 h-1 mx-1 rounded ${
+                    s < step ? "bg-gradient-to-r from-blue-500 to-purple-600" : "bg-white/20"
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Content card */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-2xl">
+          {step === 1 && (
+            <OnboardingStep1 userName={user.name} onNext={nextStep} />
+          )}
+          {step === 2 && <OnboardingStep2 onNext={nextStep} />}
+          {step === 3 && <OnboardingStep3 onNext={nextStep} />}
+          {step === 4 && (
+            <OnboardingStep4 userPhone={user.primaryPhone || user.verifiedPhones[0]} onComplete={onComplete} />
+          )}
+        </div>
+
+        {/* Skip button */}
+        <button
+          onClick={onComplete}
+          className="block mx-auto mt-6 text-sm text-white/50 hover:text-white/80 transition-colors"
+        >
+          Skip onboarding
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingStep1({ userName, onNext }: { userName: string; onNext: () => void }) {
+  return (
+    <div className="text-center">
+      <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+        <span className="text-white text-5xl">📞</span>
+      </div>
+      <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
+        Welcome, {userName.split(" ")[0]}!
+      </h1>
+      <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">
+        TalkCRM lets you manage Salesforce entirely by voice.
+        <br />
+        Let's get you set up in under 2 minutes.
+      </p>
+
+      <div className="grid grid-cols-3 gap-4 mb-8 text-left">
+        <FeatureCard icon="🎙️" title="Voice Commands" description="Speak naturally to your CRM" />
+        <FeatureCard icon="🔄" title="Auto Updates" description="Salesforce syncs instantly" />
+        <FeatureCard icon="📱" title="Any Phone" description="Works with your existing phone" />
+      </div>
+
+      <button
+        onClick={onNext}
+        className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity text-lg"
+      >
+        Let's Get Started →
+      </button>
+    </div>
+  );
+}
+
+function FeatureCard({ icon, title, description }: { icon: string; title: string; description: string }) {
+  return (
+    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+      <span className="text-3xl block mb-2">{icon}</span>
+      <h3 className="font-semibold text-slate-900 dark:text-white text-sm">{title}</h3>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+    </div>
+  );
+}
+
+function OnboardingStep2({ onNext }: { onNext: () => void }) {
+  return (
+    <div className="text-center">
+      <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
+        <span className="text-4xl">🔗</span>
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">
+        How It Works
+      </h2>
+      <p className="text-slate-600 dark:text-slate-300 mb-8">
+        TalkCRM connects to your Salesforce account to read and update your data.
+      </p>
+
+      <div className="text-left space-y-4 mb-8 max-w-md mx-auto">
+        <HowItWorksItem
+          number={1}
+          title="Call from your registered phone"
+          description="We identify you by your phone number - no passwords needed"
+        />
+        <HowItWorksItem
+          number={2}
+          title="Speak your request"
+          description="'What's in my pipeline?' or 'Update the Acme deal'"
+        />
+        <HowItWorksItem
+          number={3}
+          title="We handle the rest"
+          description="Your assistant searches, creates, and updates Salesforce for you"
+        />
+      </div>
+
+      <button
+        onClick={onNext}
+        className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity"
+      >
+        Continue →
+      </button>
+    </div>
+  );
+}
+
+function HowItWorksItem({ number, title, description }: { number: number; title: string; description: string }) {
+  return (
+    <div className="flex gap-4">
+      <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+        {number}
+      </div>
+      <div>
+        <h3 className="font-medium text-slate-900 dark:text-white">{title}</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingStep3({ onNext }: { onNext: () => void }) {
+  return (
+    <div className="text-center">
+      <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
+        <span className="text-4xl">💬</span>
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">
+        Example Commands
+      </h2>
+      <p className="text-slate-600 dark:text-slate-300 mb-6">
+        Here's what you can say when you call:
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 mb-8 text-left">
+        <ExampleCommand category="Search" command="Find the Acme account" />
+        <ExampleCommand category="Pipeline" command="What's in my pipeline?" />
+        <ExampleCommand category="Tasks" command="What tasks do I have today?" />
+        <ExampleCommand category="Create" command="Create a task to call John tomorrow" />
+        <ExampleCommand category="Update" command="Update the Acme deal to Closed Won" />
+        <ExampleCommand category="Log" command="Log a call on the Johnson contact" />
+      </div>
+
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+        Don't worry about exact wording - just speak naturally!
+      </p>
+
+      <button
+        onClick={onNext}
+        className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity"
+      >
+        Almost Done →
+      </button>
+    </div>
+  );
+}
+
+function ExampleCommand({ category, command }: { category: string; command: string }) {
+  return (
+    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
+      <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+        {category}
+      </span>
+      <p className="text-sm text-slate-900 dark:text-white mt-1 font-mono">"{command}"</p>
+    </div>
+  );
+}
+
+function OnboardingStep4({ userPhone, onComplete }: { userPhone: string; onComplete: () => void }) {
+  const [hasCopied, setHasCopied] = useState(false);
+  const phoneNumber = "+1 (646) 600-5041";
+
+  const copyPhone = () => {
+    navigator.clipboard.writeText("+16466005041");
+    setHasCopied(true);
+    setTimeout(() => setHasCopied(false), 2000);
+  };
+
+  return (
+    <div className="text-center">
+      <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+        <span className="text-4xl">🎉</span>
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">
+        You're All Set!
+      </h2>
+      <p className="text-slate-600 dark:text-slate-300 mb-6">
+        Call this number from your registered phone to start using TalkCRM:
+      </p>
+
+      <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 mb-6 text-white">
+        <p className="text-sm opacity-80 mb-2">TalkCRM Phone Number</p>
+        <p className="text-3xl font-bold font-mono mb-2">{phoneNumber}</p>
+        <button
+          onClick={copyPhone}
+          className="text-sm bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-full transition-colors"
+        >
+          {hasCopied ? "Copied!" : "Copy Number"}
+        </button>
+      </div>
+
+      <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4 mb-6 text-left">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          <strong className="text-slate-900 dark:text-white">Your registered phone:</strong>{" "}
+          <span className="font-mono">{userPhone}</span>
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Make sure to call from this number to authenticate automatically.
+        </p>
+      </div>
+
+      <button
+        onClick={onComplete}
+        className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity text-lg"
+      >
+        Go to Dashboard →
+      </button>
+
+      <p className="text-sm text-slate-400 mt-4">
+        Save the number in your contacts as "TalkCRM"
+      </p>
     </div>
   );
 }
