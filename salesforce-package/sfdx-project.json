@@ -1,12 +1,26 @@
 {
   "packageDirectories": [
     {
+      "versionName": "ver 0.4",
+      "versionNumber": "0.4.0.NEXT",
       "path": "force-app",
-      "default": true
+      "default": true,
+      "package": "TalkCRM",
+      "versionDescription": "Bug fixes"
     }
   ],
   "name": "TalkCRM",
   "namespace": "",
   "sfdcLoginUrl": "https://login.salesforce.com",
-  "sourceApiVersion": "59.0"
+  "sourceApiVersion": "59.0",
+  "packageAliases": {
+    "TalkCRM": "0Hofo0000000FlRCAU",
+    "TalkCRM@0.1.0-1": "04tfo000001FZXxAAO",
+    "TalkCRM@0.1.0-2": "04tfo000001FZZZAA4",
+    "TalkCRM@0.2.0-1": "04tfo000001FZbBAAW",
+    "TalkCRM@0.2.0-2": "04tfo000001FZcnAAG",
+    "TalkCRM@0.2.0-3": "04tfo000001FZePAAW",
+    "TalkCRM@0.3.0-1": "04tfo000001FZg1AAG",
+    "TalkCRM@0.4.0-1": "04tfo000001FZjFAAW"
+  }
 }
