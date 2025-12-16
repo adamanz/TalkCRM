@@ -162,4 +162,47 @@ export default class TalkCrmSetup extends LightningElement {
             this.isLoading = false;
         }
     }
+
+    // Settings Management
+    handleChangePhone() {
+        // Go back to step 2 to change phone number
+        this.codeSent = false;
+        this.verificationCode = '';
+        this.phoneNumber = '';
+        this.errorMessage = '';
+        this.currentStep = '2';
+    }
+
+    handleReconnectSalesforce() {
+        // Clear Salesforce auth and restart OAuth flow
+        localStorage.removeItem('talkcrm_user_id');
+        localStorage.removeItem('talkcrm_email');
+        this.isConnected = false;
+        this.userId = '';
+        this.userEmail = '';
+        this.errorMessage = '';
+        // Start OAuth flow immediately
+        this.startOAuth();
+    }
+
+    handleResetAll() {
+        // Confirm before resetting
+        if (confirm('Are you sure you want to reset all TalkCRM settings? You will need to reconnect Salesforce and verify your phone number again.')) {
+            // Clear all localStorage
+            localStorage.removeItem('talkcrm_user_id');
+            localStorage.removeItem('talkcrm_email');
+            localStorage.removeItem('talkcrm_phone');
+            localStorage.removeItem('talkcrm_setup_complete');
+
+            // Reset component state
+            this.isConnected = false;
+            this.userId = '';
+            this.userEmail = '';
+            this.phoneNumber = '';
+            this.codeSent = false;
+            this.verificationCode = '';
+            this.errorMessage = '';
+            this.currentStep = '1';
+        }
+    }
 }

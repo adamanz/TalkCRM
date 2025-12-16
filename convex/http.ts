@@ -848,8 +848,8 @@ http.route({
         );
       }
 
-      // Start verification (creates code + sends SMS)
-      const result = await ctx.runAction(api.twilio.startVerification, {
+      // Start verification (creates code + sends SMS via SendBlue)
+      const result = await ctx.runAction(api.sendblue.startVerification, {
         phone,
         email,
         name,
@@ -895,7 +895,7 @@ http.route({
         return corsResponse({ error: "Phone and code are required" }, 400);
       }
 
-      const result = await ctx.runAction(api.twilio.completeVerification, {
+      const result = await ctx.runAction(api.sendblue.completeVerification, {
         phone,
         code,
       });
@@ -937,8 +937,8 @@ http.route({
         );
       }
 
-      // Start verification for existing user
-      const result = await ctx.runAction(api.twilio.startVerification, {
+      // Start verification for existing user via SendBlue
+      const result = await ctx.runAction(api.sendblue.startVerification, {
         phone,
       });
 
@@ -992,8 +992,8 @@ http.route({
         userId,
       });
 
-      // Send SMS
-      const smsResult = await ctx.runAction(api.twilio.sendVerificationSMS, {
+      // Send SMS via SendBlue
+      const smsResult = await ctx.runAction(api.sendblue.sendVerificationSMS, {
         phone: verification.phone,
         code: verification.code,
       });

@@ -104,7 +104,7 @@
                         </p>
                     </div>
 
-                    <div class="slds-box slds-theme_shade" style="max-width: 500px; margin: 0 auto;">
+                    <div class="slds-box slds-theme_shade slds-m-bottom_large" style="max-width: 500px; margin: 0 auto;">
                         <h4 class="slds-text-title_bold slds-m-bottom_small">Try saying:</h4>
                         <ul class="slds-list_dotted slds-text-align_left">
                             <li>"What's in my pipeline?"</li>
@@ -112,6 +112,43 @@
                             <li>"Create a task to call John tomorrow"</li>
                             <li>"Update the Acme deal to Closed Won"</li>
                         </ul>
+                    </div>
+
+                    <!-- Manage Settings Section -->
+                    <div class="slds-box slds-theme_default" style="max-width: 500px; margin: 0 auto;">
+                        <h4 class="slds-text-title_bold slds-m-bottom_medium">
+                            <lightning-icon icon-name="utility:settings" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                            Manage Settings
+                        </h4>
+                        <div class="slds-grid slds-wrap slds-gutters_small">
+                            <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
+                                <lightning-button
+                                    variant="neutral"
+                                    label="Change Phone Number"
+                                    onclick={handleChangePhone}
+                                    icon-name="utility:phone_portrait"
+                                    class="full-width-button">
+                                </lightning-button>
+                            </div>
+                            <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
+                                <lightning-button
+                                    variant="neutral"
+                                    label="Reconnect Salesforce"
+                                    onclick={handleReconnectSalesforce}
+                                    icon-name="utility:refresh"
+                                    class="full-width-button">
+                                </lightning-button>
+                            </div>
+                            <div class="slds-col slds-size_1-of-1 slds-m-top_small">
+                                <lightning-button
+                                    variant="destructive-text"
+                                    label="Reset All Settings"
+                                    onclick={handleResetAll}
+                                    icon-name="utility:delete"
+                                    class="full-width-button">
+                                </lightning-button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </template>
