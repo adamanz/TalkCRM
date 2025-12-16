@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.5",
-      "versionNumber": "0.5.0.NEXT",
+      "versionName": "ver 0.6",
+      "versionNumber": "0.6.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "TalkCRM",
-      "versionDescription": "Multi-tenant OAuth with per-org Connected App"
+      "versionDescription": "Package version 0.6.0"
     }
   ],
   "name": "TalkCRM",
@@ -23,6 +23,8 @@
     "TalkCRM@0.3.0-1": "04tfo000001FZg1AAG",
     "TalkCRM@0.4.0-1": "04tfo000001FZjFAAW",
     "TalkCRM@0.4.0-2": "04tfo000001FZkrAAG",
-    "TalkCRM@0.5.0-1": "04tfo000001FZmTAAW"
+    "TalkCRM@0.5.0-1": "04tfo000001FZmTAAW",
+    "TalkCRM@0.6.0-1": "04tfo000001FZo5AAG",
+    "TalkCRM@0.6.0-2": "04tfo000001FZphAAG"
   }
 }
