@@ -1056,6 +1056,74 @@ http.route({
 });
 
 // ============================================================================
+// ORG CREDENTIALS (Multi-tenant Connected App support)
+// ============================================================================
+
+/**
+ * Register org credentials (OPTIONS preflight)
+ */
+http.route({
+  path: "/api/org/register",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
+ * Register org's Connected App credentials
+ * POST /api/org/register
+ * Body: { instanceUrl, consumerKey, consumerSecret }
+ */
+http.route({
+  path: "/api/org/register",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { instanceUrl, consumerKey, consumerSecret } = body;
+
+      if (!instanceUrl || !consumerKey || !consumerSecret) {
+        return corsResponse({ error: "instanceUrl, consumerKey, and consumerSecret are required" }, 400);
+      }
+
+      // Normalize instance URL (remove trailing slash, convert lightning to my.salesforce)
+      let normalizedUrl = instanceUrl.replace(/\/$/, "");
+      // Convert lightning.force.com to my.salesforce.com for consistency
+      normalizedUrl = normalizedUrl.replace(".lightning.force.com", ".my.salesforce.com");
+
+      // Check if credentials already exist for this org
+      const existing = await ctx.runQuery(internal.orgCredentials.getByInstance, {
+        instanceUrl: normalizedUrl,
+      });
+
+      if (existing) {
+        // Update existing credentials
+        await ctx.runMutation(internal.orgCredentials.update, {
+          id: existing._id,
+          consumerKey,
+          consumerSecret,
+        });
+      } else {
+        // Create new credentials
+        await ctx.runMutation(internal.orgCredentials.create, {
+          instanceUrl: normalizedUrl,
+          consumerKey,
+          consumerSecret,
+        });
+      }
+
+      return corsResponse({
+        success: true,
+        instanceUrl: normalizedUrl,
+        message: "Credentials saved successfully",
+      });
+    } catch (error: any) {
+      console.error("Org register error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+// ============================================================================
 // SALESFORCE OAUTH (Multi-tenant - works from web app or Salesforce LWC)
 // ============================================================================
 
@@ -1105,6 +1173,7 @@ http.route({
 /**
  * Initiate OAuth flow from Salesforce LWC (package flow)
  * Called by the TalkCRM Setup wizard in the Salesforce package
+ * Uses per-org Connected App credentials for multi-tenant support
  */
 http.route({
   path: "/auth/salesforce/initiate",
@@ -1119,19 +1188,47 @@ http.route({
         return new Response("Missing callback_url parameter", { status: 400 });
       }
 
-      const clientId = process.env.SALESFORCE_CLIENT_ID!;
+      if (!instanceUrl) {
+        return new Response("Missing instance_url parameter", { status: 400 });
+      }
+
+      // Normalize instance URL
+      let normalizedUrl = instanceUrl.replace(/\/$/, "");
+      normalizedUrl = normalizedUrl.replace(".lightning.force.com", ".my.salesforce.com");
+
+      // Look up org credentials
+      const orgCreds = await ctx.runQuery(internal.orgCredentials.getByInstance, {
+        instanceUrl: normalizedUrl,
+      });
+
+      if (!orgCreds) {
+        // Return helpful error for unconfigured org
+        return new Response(
+          `<html>
+            <head><title>TalkCRM - Setup Required</title></head>
+            <body style="font-family: sans-serif; padding: 40px; text-align: center;">
+              <h1>Connected App Not Configured</h1>
+              <p>No credentials found for: <strong>${normalizedUrl}</strong></p>
+              <p>Please complete Step 1 in the TalkCRM Setup wizard to configure your Connected App credentials.</p>
+              <a href="${callbackUrl}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #0176d3; color: white; text-decoration: none; border-radius: 4px;">Back to Setup</a>
+            </body>
+          </html>`,
+          { status: 400, headers: { "Content-Type": "text/html" } }
+        );
+      }
+
+      const clientId = orgCreds.consumerKey;
       const redirectUri = process.env.SALESFORCE_REDIRECT_URI!;
 
-      // Store the callback URL in state parameter (base64 encoded)
+      // Store the callback URL and instance URL in state parameter (base64 encoded)
       const state = btoa(JSON.stringify({
         source: "salesforce",
         callbackUrl,
-        instanceUrl,
+        instanceUrl: normalizedUrl,
       }));
 
-      // Build Salesforce OAuth URL (use My Domain URL for org-specific login)
-      const loginDomain = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
-      const authUrl = new URL(`${loginDomain}/services/oauth2/authorize`);
+      // Build Salesforce OAuth URL - use the org's My Domain URL for org-specific login
+      const authUrl = new URL(`${normalizedUrl}/services/oauth2/authorize`);
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("client_id", clientId);
       authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -1155,6 +1252,7 @@ http.route({
 /**
  * OAuth callback from Salesforce
  * Creates/updates user and redirects back to Salesforce LWC
+ * Uses per-org Connected App credentials for multi-tenant support
  */
 http.route({
   path: "/auth/salesforce/callback",
@@ -1184,14 +1282,46 @@ http.route({
         return new Response(`Missing authorization code. URL: ${request.url}`, { status: 400 });
       }
 
-      const clientId = process.env.SALESFORCE_CLIENT_ID!;
-      const clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
+      // Parse state to get instanceUrl for per-org credentials
+      let stateData: any = {};
+      if (state) {
+        try {
+          stateData = JSON.parse(atob(state));
+        } catch (e) {
+          console.error("Failed to parse state:", e);
+        }
+      }
+
       const redirectUri = process.env.SALESFORCE_REDIRECT_URI!;
+      let clientId: string;
+      let clientSecret: string;
+      let tokenEndpoint: string;
+
+      // Check if this is a per-org flow (from Salesforce LWC) or legacy flow
+      if (stateData.instanceUrl && stateData.source === "salesforce") {
+        // Per-org flow - look up credentials
+        const orgCreds = await ctx.runQuery(internal.orgCredentials.getByInstance, {
+          instanceUrl: stateData.instanceUrl,
+        });
+
+        if (!orgCreds) {
+          return new Response(`No credentials found for org: ${stateData.instanceUrl}`, { status: 400 });
+        }
+
+        clientId = orgCreds.consumerKey;
+        clientSecret = orgCreds.consumerSecret;
+        tokenEndpoint = `${stateData.instanceUrl}/services/oauth2/token`;
+      } else {
+        // Legacy flow - use env vars (for web app or backward compatibility)
+        clientId = process.env.SALESFORCE_CLIENT_ID!;
+        clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
+        const loginDomain = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
+        tokenEndpoint = `${loginDomain}/services/oauth2/token`;
+      }
 
       // Exchange code for tokens
-      const loginDomain = process.env.SALESFORCE_LOGIN_URL || "https://login.salesforce.com";
       const tokenResponse = await fetch(
-        `${loginDomain}/services/oauth2/token`,
+        tokenEndpoint,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1250,17 +1380,7 @@ http.route({
         salesforceUserId: userInfo.user_id,
       });
 
-      // Parse state to determine redirect destination
-      let stateData: any = {};
-      if (state) {
-        try {
-          stateData = JSON.parse(atob(state));
-        } catch (e) {
-          console.error("Failed to parse state:", e);
-        }
-      }
-
-      // Handle different OAuth sources
+      // Handle different OAuth sources (stateData already parsed above)
       if (stateData.source === "web") {
         // Web app flow - redirect back to web app
         const returnUrl = stateData.returnUrl || "/";

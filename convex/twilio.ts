@@ -31,7 +31,7 @@ export const sendVerificationSMS = action({
     }
 
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-    const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const auth = btoa(`${accountSid}:${authToken}`);
 
     const body = new URLSearchParams({
       To: args.phone,
@@ -173,7 +173,7 @@ export const makeOutboundCall = action({
     }
 
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`;
-    const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const auth = btoa(`${accountSid}:${authToken}`);
 
     // TwiML to connect to ElevenLabs
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>

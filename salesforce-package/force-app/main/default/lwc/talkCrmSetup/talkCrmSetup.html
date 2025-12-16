@@ -3,20 +3,76 @@
         <!-- Step Indicator -->
         <div class="slds-p-horizontal_medium">
             <lightning-progress-indicator current-step={currentStep} type="path" variant="base">
-                <lightning-progress-step label="Connect Salesforce" value="1"></lightning-progress-step>
-                <lightning-progress-step label="Verify Phone" value="2"></lightning-progress-step>
-                <lightning-progress-step label="Ready!" value="3"></lightning-progress-step>
+                <lightning-progress-step label="Configure App" value="1"></lightning-progress-step>
+                <lightning-progress-step label="Connect Salesforce" value="2"></lightning-progress-step>
+                <lightning-progress-step label="Verify Phone" value="3"></lightning-progress-step>
+                <lightning-progress-step label="Ready!" value="4"></lightning-progress-step>
             </lightning-progress-indicator>
         </div>
 
         <div class="slds-p-around_medium">
-            <!-- Step 1: Connect Salesforce -->
+            <!-- Step 1: Configure Connected App -->
             <template lwc:if={isStep1}>
+                <div class="slds-text-align_center slds-p-around_large">
+                    <lightning-icon icon-name="standard:connected_apps" size="large" class="slds-m-bottom_medium"></lightning-icon>
+                    <h2 class="slds-text-heading_medium slds-m-bottom_small">Configure Connected App</h2>
+                    <p class="slds-text-body_regular slds-m-bottom_medium">
+                        TalkCRM needs OAuth credentials from your org's Connected App to securely access Salesforce.
+                    </p>
+
+                    <div class="slds-box slds-theme_shade slds-m-bottom_medium" style="max-width: 600px; margin: 0 auto; text-align: left;">
+                        <h4 class="slds-text-title_bold slds-m-bottom_small">How to get your credentials:</h4>
+                        <ol class="slds-list_ordered">
+                            <li class="slds-m-bottom_x-small">Go to <strong>Setup</strong> → <strong>App Manager</strong></li>
+                            <li class="slds-m-bottom_x-small">Find <strong>TalkCRM Voice Assistant</strong> in the list and click the dropdown arrow → <strong>View</strong></li>
+                            <li class="slds-m-bottom_x-small">Click <strong>Manage Consumer Details</strong> (you may need to verify your identity)</li>
+                            <li class="slds-m-bottom_x-small">Copy the <strong>Consumer Key</strong> and <strong>Consumer Secret</strong></li>
+                        </ol>
+                    </div>
+
+                    <div style="max-width: 400px; margin: 0 auto;">
+                        <div class="slds-form-element slds-m-bottom_medium">
+                            <lightning-input
+                                type="text"
+                                label="Consumer Key"
+                                placeholder="3MVG9..."
+                                value={consumerKey}
+                                onchange={handleConsumerKeyChange}
+                                required>
+                            </lightning-input>
+                        </div>
+                        <div class="slds-form-element slds-m-bottom_medium">
+                            <lightning-input
+                                type="password"
+                                label="Consumer Secret"
+                                placeholder="Enter Consumer Secret"
+                                value={consumerSecret}
+                                onchange={handleConsumerSecretChange}
+                                required>
+                            </lightning-input>
+                        </div>
+                        <lightning-button
+                            variant="brand"
+                            label="Save Credentials"
+                            onclick={handleSaveCredentials}
+                            disabled={isLoading}
+                            class="slds-m-top_medium">
+                        </lightning-button>
+                    </div>
+
+                    <template lwc:if={isLoading}>
+                        <lightning-spinner alternative-text="Loading" size="small" class="slds-m-top_medium"></lightning-spinner>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Step 2: Connect Salesforce -->
+            <template lwc:if={isStep2}>
                 <div class="slds-text-align_center slds-p-around_large">
                     <lightning-icon icon-name="standard:connected_apps" size="large" class="slds-m-bottom_medium"></lightning-icon>
                     <h2 class="slds-text-heading_medium slds-m-bottom_small">Connect Your Salesforce Account</h2>
                     <p class="slds-text-body_regular slds-m-bottom_large">
-                        TalkCRM needs permission to access your Salesforce data so you can manage your CRM by voice.
+                        Now authorize TalkCRM to access your Salesforce data so you can manage your CRM by voice.
                     </p>
 
                     <template lwc:if={isConnected}>
@@ -24,7 +80,7 @@
                             <lightning-icon icon-name="utility:success" variant="inverse" size="small" class="slds-m-right_x-small"></lightning-icon>
                             Connected as: <strong>{userEmail}</strong>
                         </div>
-                        <lightning-button variant="brand" label="Continue to Phone Setup" onclick={goToStep2}></lightning-button>
+                        <lightning-button variant="brand" label="Continue to Phone Setup" onclick={goToStep3}></lightning-button>
                     </template>
 
                     <template lwc:else>
@@ -36,8 +92,8 @@
                 </div>
             </template>
 
-            <!-- Step 2: Phone Verification -->
-            <template lwc:if={isStep2}>
+            <!-- Step 3: Phone Verification -->
+            <template lwc:if={isStep3}>
                 <div class="slds-text-align_center slds-p-around_large">
                     <lightning-icon icon-name="standard:call" size="large" class="slds-m-bottom_medium"></lightning-icon>
                     <h2 class="slds-text-heading_medium slds-m-bottom_small">Verify Your Phone Number</h2>
@@ -84,8 +140,8 @@
                 </div>
             </template>
 
-            <!-- Step 3: Complete -->
-            <template lwc:if={isStep3}>
+            <!-- Step 4: Complete -->
+            <template lwc:if={isStep4}>
                 <div class="slds-text-align_center slds-p-around_large">
                     <lightning-icon icon-name="action:approval" size="large" class="slds-m-bottom_medium"></lightning-icon>
                     <h2 class="slds-text-heading_medium slds-m-bottom_small">You're All Set!</h2>
@@ -139,7 +195,16 @@
                                     class="full-width-button">
                                 </lightning-button>
                             </div>
-                            <div class="slds-col slds-size_1-of-1 slds-m-top_small">
+                            <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
+                                <lightning-button
+                                    variant="neutral"
+                                    label="Update App Credentials"
+                                    onclick={handleReconfigureCredentials}
+                                    icon-name="utility:key"
+                                    class="full-width-button">
+                                </lightning-button>
+                            </div>
+                            <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
                                 <lightning-button
                                     variant="destructive-text"
                                     label="Reset All Settings"
@@ -150,6 +215,14 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </template>
+
+            <!-- Success Message -->
+            <template lwc:if={successMessage}>
+                <div class="slds-notify slds-notify_alert slds-alert_success slds-m-top_medium" role="alert">
+                    <lightning-icon icon-name="utility:success" variant="inverse" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                    {successMessage}
                 </div>
             </template>
 

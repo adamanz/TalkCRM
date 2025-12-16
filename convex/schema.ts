@@ -51,6 +51,15 @@ export default defineSchema({
     salesforceUserId: v.optional(v.string()), // Salesforce User ID for this connection
   }).index("by_user", ["userId"]),
 
+  // Store per-org Connected App credentials (for multi-tenant OAuth)
+  orgCredentials: defineTable({
+    instanceUrl: v.string(), // e.g., https://mycompany.my.salesforce.com
+    consumerKey: v.string(),
+    consumerSecret: v.string(), // Encrypted/stored securely
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceUrl"]),
+
   // ============================================================================
   // CONVERSATIONS (Now linked to users)
   // ============================================================================

@@ -4,6 +4,7 @@
         <itemInstances>
             <componentInstance>
                 <componentName>talkCrmSetup</componentName>
+                <identifier>talkCrmSetup_1</identifier>
             </componentInstance>
         </itemInstances>
         <name>main</name>

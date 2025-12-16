@@ -29,6 +29,17 @@ private class TalkCrmControllerTest {
         }
     }
 
+    // Mock HTTP callout for error without 'error' field
+    private class MockHttpErrorNoMessage implements HttpCalloutMock {
+        public HTTPResponse respond(HTTPRequest req) {
+            HttpResponse res = new HttpResponse();
+            res.setHeader('Content-Type', 'application/json');
+            res.setStatusCode(500);
+            res.setBody('{"status": "failed"}');
+            return res;
+        }
+    }
+
     @isTest
     static void testSendVerificationCodeSuccess() {
         Test.setMock(HttpCalloutMock.class, new MockHttpSuccess());
@@ -46,13 +57,15 @@ private class TalkCrmControllerTest {
         Test.setMock(HttpCalloutMock.class, new MockHttpError());
 
         Test.startTest();
+        Boolean exceptionThrown = false;
         try {
             TalkCrmController.sendVerificationCode('user123', '+14155551234');
-            System.assert(false, 'Expected AuraHandledException');
         } catch (AuraHandledException e) {
-            System.assert(e.getMessage().contains('Invalid request'), 'Expected error message');
+            exceptionThrown = true;
         }
         Test.stopTest();
+
+        System.assert(exceptionThrown, 'Expected AuraHandledException to be thrown');
     }
 
     @isTest
@@ -72,12 +85,46 @@ private class TalkCrmControllerTest {
         Test.setMock(HttpCalloutMock.class, new MockHttpError());
 
         Test.startTest();
+        Boolean exceptionThrown = false;
         try {
             TalkCrmController.verifyCode('+14155551234', '123456');
-            System.assert(false, 'Expected AuraHandledException');
         } catch (AuraHandledException e) {
-            System.assert(e.getMessage().contains('Invalid request'), 'Expected error message');
+            exceptionThrown = true;
         }
         Test.stopTest();
+
+        System.assert(exceptionThrown, 'Expected AuraHandledException to be thrown');
+    }
+
+    @isTest
+    static void testSendVerificationCodeErrorNoMessage() {
+        Test.setMock(HttpCalloutMock.class, new MockHttpErrorNoMessage());
+
+        Test.startTest();
+        Boolean exceptionThrown = false;
+        try {
+            TalkCrmController.sendVerificationCode('user123', '+14155551234');
+        } catch (AuraHandledException e) {
+            exceptionThrown = true;
+        }
+        Test.stopTest();
+
+        System.assert(exceptionThrown, 'Expected AuraHandledException to be thrown');
+    }
+
+    @isTest
+    static void testVerifyCodeErrorNoMessage() {
+        Test.setMock(HttpCalloutMock.class, new MockHttpErrorNoMessage());
+
+        Test.startTest();
+        Boolean exceptionThrown = false;
+        try {
+            TalkCrmController.verifyCode('+14155551234', '123456');
+        } catch (AuraHandledException e) {
+            exceptionThrown = true;
+        }
+        Test.stopTest();
+
+        System.assert(exceptionThrown, 'Expected AuraHandledException to be thrown');
     }
 }

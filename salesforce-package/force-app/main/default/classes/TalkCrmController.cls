@@ -21,41 +21,49 @@ public with sharing class TalkCrmController {
 
             if (res.getStatusCode() >= 400) {
                 String errorMsg = result.containsKey('error') ? (String) result.get('error') : 'Request failed';
-                throw new AuraHandledException(errorMsg);
+                AuraHandledException ex = new AuraHandledException(errorMsg);
+                ex.setMessage(errorMsg);
+                throw ex;
             }
 
             return result;
+        } catch (AuraHandledException e) {
+            throw e;
         } catch (Exception e) {
-            throw new AuraHandledException(e.getMessage());
+            String msg = e.getMessage();
+            if (e.getTypeName().contains('CalloutException')) {
+                msg = 'Unable to connect to TalkCRM. Please check Remote Site Settings.';
+            }
+            AuraHandledException ex = new AuraHandledException(msg);
+            ex.setMessage(msg);
+            throw ex;
         }
     }
 
     @AuraEnabled
     public static Map<String, Object> verifyCode(String phone, String code) {
-        try {
-            HttpRequest req = new HttpRequest();
-            req.setEndpoint(TALKCRM_API_URL + '/api/auth/verify');
-            req.setMethod('POST');
-            req.setHeader('Content-Type', 'application/json');
-            req.setBody(JSON.serialize(new Map<String, String>{
-                'phone' => phone,
-                'code' => code
-            }));
-            req.setTimeout(30000);
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint(TALKCRM_API_URL + '/api/auth/verify');
+        req.setMethod('POST');
+        req.setHeader('Content-Type', 'application/json');
+        req.setBody(JSON.serialize(new Map<String, String>{
+            'phone' => phone,
+            'code' => code
+        }));
+        req.setTimeout(30000);
 
-            Http http = new Http();
-            HttpResponse res = http.send(req);
+        Http http = new Http();
+        HttpResponse res = http.send(req);
 
-            Map<String, Object> result = (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
+        Map<String, Object> result = (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
 
-            if (res.getStatusCode() >= 400) {
-                String errorMsg = result.containsKey('error') ? (String) result.get('error') : 'Verification failed';
-                throw new AuraHandledException(errorMsg);
-            }
-
-            return result;
-        } catch (Exception e) {
-            throw new AuraHandledException(e.getMessage());
+        if (res.getStatusCode() >= 400) {
+            String errorMsg = result.containsKey('error') ? (String) result.get('error') : 'Verification failed';
+            AuraHandledException ex = new AuraHandledException(errorMsg);
+            ex.setMessage(errorMsg);
+            throw ex;
         }
+
+        return result;
     }
 }
