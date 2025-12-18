@@ -16,7 +16,13 @@ import {
 } from "lucide-react";
 import { OptimizedVideo } from "./components/OptimizedVideo";
 
-export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void, onSignup: () => void }) {
+interface LandingPageProps {
+  onLogin: () => void;
+  onSignup: () => void;
+  onNavigate?: (path: string) => void;
+}
+
+export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPageProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
@@ -109,7 +115,7 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
             >
               Update Salesforce
               <br />
-              <span className="text-slate-400">with your voice</span>
+              <span className="text-slate-400">in 30 seconds, hands-free</span>
             </motion.h1>
 
             {/* Subheadline */}
@@ -119,7 +125,7 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-lg text-slate-500 mb-10 max-w-xl mx-auto leading-relaxed"
             >
-              TalkCRM is a voice-first AI assistant that updates your CRM while you drive, walk, or grab coffee. Just talk naturally.
+              Sales reps spend 5+ hours a week on CRM data entry. TalkCRM lets you update Salesforce by voice from your car, between meetings, wherever. Sell more, type less.
             </motion.p>
 
             {/* CTAs */}
@@ -152,7 +158,20 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
               transition={{ duration: 0.5, delay: 0.5 }}
               className="mt-8 text-xs text-slate-400"
             >
-              No credit card required
+              No credit card required · By continuing, you agree to our{" "}
+              <button
+                onClick={() => onNavigate?.("/terms")}
+                className="underline hover:text-slate-600 transition-colors"
+              >
+                Terms
+              </button>{" "}
+              and{" "}
+              <button
+                onClick={() => onNavigate?.("/privacy")}
+                className="underline hover:text-slate-600 transition-colors"
+              >
+                Privacy Policy
+              </button>
             </motion.p>
           </div>
         </section>
@@ -202,48 +221,48 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
               className="text-center mb-16"
             >
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 mb-3">
-                Built for people who sell
+                Get 5+ hours back every week
               </h2>
               <p className="text-base text-slate-500 max-w-lg mx-auto">
-                Stop wrestling with mobile apps. Update your pipeline the natural way.
+                Stop typing into Salesforce. Just call in and talk. Your pipeline stays accurate without the admin work.
               </p>
             </motion.div>
 
             <div className="grid md:grid-cols-3 gap-6">
               <FeatureCard
                 icon={Zap}
-                title="Instant updates"
-                description="Change stages, update fields, and log notes in seconds. No typing required."
+                title="10x faster updates"
+                description="30 seconds by voice vs 5 minutes typing. Update deals, log calls, change stages instantly."
                 delay={0}
               />
               <FeatureCard
                 icon={Search}
-                title="Smart search"
-                description="Ask 'What's the status of Acme?' and get an instant answer."
+                title="Real-time accuracy"
+                description="Update in the moment, not days later. Your pipeline is always current."
                 delay={0.1}
               />
               <FeatureCard
                 icon={Phone}
-                title="Works on any phone"
-                description="No app needed. Just call your dedicated number from any phone."
+                title="Works from anywhere"
+                description="No app to open. Call from your car, between meetings, wherever you are."
                 delay={0.2}
               />
               <FeatureCard
                 icon={Mic}
-                title="Meeting summaries"
-                description="Call after meetings to capture notes. We structure them into Salesforce."
+                title="Natural language"
+                description="Just say 'update the Acme deal to Closed Won'—our AI handles the rest."
                 delay={0.3}
               />
               <FeatureCard
                 icon={Calendar}
-                title="Task management"
-                description="Create follow-ups and reminders naturally as you think of them."
+                title="Tasks & follow-ups"
+                description="Create reminders as you think of them. 'Remind me to call John tomorrow.'"
                 delay={0.4}
               />
               <FeatureCard
                 icon={Shield}
-                title="Enterprise secure"
-                description="SOC 2 compliant. Your data is encrypted and synced directly to Salesforce."
+                title="Your permissions, respected"
+                description="Uses your existing Salesforce roles and permissions. No extra admin setup."
                 delay={0.5}
               />
             </div>
@@ -260,28 +279,28 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
               className="text-center mb-16"
             >
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 mb-3">
-                Three steps to freedom
+                Setup takes 2 minutes
               </h2>
               <p className="text-base text-slate-500 max-w-lg mx-auto">
-                Get started in under two minutes.
+                No IT required. No app to install. Just connect and start talking.
               </p>
             </motion.div>
 
             <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
               <StepCard
                 number="01"
-                title="Connect"
-                description="Sign up and connect your Salesforce account with one click."
+                title="Connect Salesforce"
+                description="One-click OAuth. Uses your existing permissions—no admin setup needed."
               />
               <StepCard
                 number="02"
-                title="Call"
-                description="Dial your dedicated TalkCRM number from your phone."
+                title="Save the number"
+                description="Get your dedicated TalkCRM number. Save it as a contact."
               />
               <StepCard
                 number="03"
-                title="Talk"
-                description="Speak naturally. We handle the rest and confirm what we did."
+                title="Start talking"
+                description="'Update the Acme deal to Closed Won.' Done in 30 seconds."
               />
             </div>
           </div>
@@ -318,18 +337,21 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
               viewport={{ once: true }}
             >
               <h2 className="text-3xl font-semibold tracking-tight text-slate-900 mb-4">
-                Ready to ditch the data entry?
+                Stop typing. Start selling.
               </h2>
               <p className="text-base text-slate-500 mb-8 max-w-md mx-auto">
-                Join the beta and get your own voice assistant for Salesforce.
+                Get 5+ hours back every week. Your reps will actually use Salesforce when it only takes 30 seconds.
               </p>
               <button
                 onClick={onSignup}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
               >
-                Get started for free
+                Start free trial
                 <ArrowRight className="w-4 h-4" />
               </button>
+              <p className="text-xs text-slate-400 mt-4">
+                Free tier available · No credit card required
+              </p>
             </motion.div>
           </div>
         </section>
@@ -346,9 +368,19 @@ export default function LandingPage({ onLogin, onSignup }: { onLogin: () => void
               <span className="text-sm font-semibold text-slate-900">TalkCRM</span>
             </div>
             <div className="flex gap-8 text-sm text-slate-400">
-              <a href="#" className="hover:text-slate-600 transition-colors">Privacy</a>
-              <a href="#" className="hover:text-slate-600 transition-colors">Terms</a>
-              <a href="#" className="hover:text-slate-600 transition-colors">Contact</a>
+              <button
+                onClick={() => onNavigate?.("/privacy")}
+                className="hover:text-slate-600 transition-colors"
+              >
+                Privacy
+              </button>
+              <button
+                onClick={() => onNavigate?.("/terms")}
+                className="hover:text-slate-600 transition-colors"
+              >
+                Terms
+              </button>
+              <a href="mailto:hello@talkcrm.io" className="hover:text-slate-600 transition-colors">Contact</a>
             </div>
             <p className="text-sm text-slate-400">
               © {new Date().getFullYear()} TalkCRM
