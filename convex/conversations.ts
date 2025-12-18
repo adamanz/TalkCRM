@@ -605,3 +605,74 @@ export const getConversationAnalytics = query({
     };
   },
 });
+
+// ============================================================================
+// GLOBAL QUERIES (For dashboard - all users)
+// ============================================================================
+
+/**
+ * Get global stats across all conversations (for admin dashboard)
+ * Returns summary stats without user filtering
+ */
+export const getGlobalStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const allConversations = await ctx.db.query("conversations").collect();
+
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+
+    const todayConversations = allConversations.filter(
+      (c) => c.startTime > oneDayAgo
+    );
+
+    return {
+      total: allConversations.length,
+      today: todayConversations.length,
+      recordsAccessed: allConversations.reduce(
+        (sum, c) => sum + c.salesforceRecordsAccessed.length,
+        0
+      ),
+      recordsModified: allConversations.reduce(
+        (sum, c) => sum + c.salesforceRecordsModified.length,
+        0
+      ),
+    };
+  },
+});
+
+/**
+ * List all conversations across all users (for admin dashboard)
+ * Returns recent conversations with key analytics fields
+ */
+export const listAllConversations = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const conversations = await ctx.db
+      .query("conversations")
+      .order("desc")
+      .take(args.limit || 50);
+
+    return conversations.map((c) => ({
+      _id: c._id,
+      _creationTime: c._creationTime,
+      conversationId: c.conversationId,
+      userId: c.userId,
+      callerPhone: c.callerPhone,
+      calledNumber: c.calledNumber,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      durationSeconds: c.durationSeconds,
+      status: c.status,
+      summary: c.summary,
+      costCents: c.costCents,
+      turnCount: c.turnCount,
+      sentiment: c.sentiment,
+      successEvaluation: c.successEvaluation,
+      salesforceRecordsAccessed: c.salesforceRecordsAccessed,
+      salesforceRecordsModified: c.salesforceRecordsModified,
+    }));
+  },
+});

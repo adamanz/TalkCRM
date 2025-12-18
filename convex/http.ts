@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import { authComponent, createAuth } from "./auth";
 
 // Helper to log activity to dashboard
 type ActivityType = "thinking" | "searching" | "found" | "creating" | "updating" | "success" | "error";
@@ -29,6 +30,11 @@ async function logActivity(
 }
 
 const http = httpRouter();
+
+// ============================================================================
+// BETTER AUTH ROUTES - Register authentication endpoints
+// ============================================================================
+authComponent.registerRoutes(http, createAuth, { cors: true });
 
 // ============================================================================
 // CORS HELPERS
