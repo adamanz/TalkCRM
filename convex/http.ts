@@ -55,6 +55,69 @@ function corsOptionsResponse() {
 }
 
 // ============================================================================
+// ELEVENLABS WEBHOOK SIGNATURE VERIFICATION
+// ============================================================================
+
+/**
+ * Verify ElevenLabs webhook signature using HMAC-SHA256
+ * Signature format: t=timestamp,v0=hash
+ */
+async function verifyElevenLabsSignature(
+  signature: string,
+  payload: string,
+  secret: string
+): Promise<boolean> {
+  try {
+    // Parse signature header: t=timestamp,v0=hash
+    const parts = signature.split(",");
+    const timestampPart = parts.find((p) => p.startsWith("t="));
+    const hashPart = parts.find((p) => p.startsWith("v0="));
+
+    if (!timestampPart || !hashPart) {
+      console.error("Invalid signature format - missing parts");
+      return false;
+    }
+
+    const timestamp = timestampPart.slice(2);
+    const expectedHash = hashPart.slice(3);
+
+    // Check timestamp is within 5 minutes to prevent replay attacks
+    const timestampNum = parseInt(timestamp, 10);
+    const now = Math.floor(Date.now() / 1000);
+    if (Math.abs(now - timestampNum) > 300) {
+      console.error("Webhook timestamp too old");
+      return false;
+    }
+
+    // Compute HMAC-SHA256 of timestamp.payload
+    const signedPayload = `${timestamp}.${payload}`;
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const signatureBytes = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      encoder.encode(signedPayload)
+    );
+
+    // Convert to hex
+    const computedHash = Array.from(new Uint8Array(signatureBytes))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return computedHash === expectedHash;
+  } catch (error) {
+    console.error("Signature verification error:", error);
+    return false;
+  }
+}
+
+// ============================================================================
 // AI-POWERED SALESFORCE ASSISTANT (Primary Tool)
 // Single intelligent endpoint that interprets natural language using Claude
 // ============================================================================
@@ -746,11 +809,25 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
-      const body = await request.json();
+      const rawBody = await request.text();
+      const body = JSON.parse(rawBody);
       console.log("ElevenLabs post-call webhook:", JSON.stringify(body, null, 2));
 
-      // Validate webhook signature (optional but recommended)
-      // const signature = request.headers.get("elevenlabs-signature");
+      // Validate webhook signature
+      const signature = request.headers.get("elevenlabs-signature");
+      const webhookSecret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+
+      if (webhookSecret && signature) {
+        const isValid = await verifyElevenLabsSignature(signature, rawBody, webhookSecret);
+        if (!isValid) {
+          console.error("Invalid ElevenLabs webhook signature");
+          return new Response(JSON.stringify({ error: "Invalid signature" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        console.log("ElevenLabs webhook signature verified");
+      }
 
       // ElevenLabs sends: { type, event_timestamp, data }
       // Some webhook variants nest the payload at `data.data`; prefer that if present.

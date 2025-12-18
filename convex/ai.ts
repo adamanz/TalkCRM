@@ -88,13 +88,16 @@ SOQL QUERY RULES (CRITICAL - READ CAREFULLY):
 - You can query ANY standard Salesforce object with SOQL
 - For user-specific queries ("my leads", "my accounts", etc.), ALWAYS use: OwnerId = CURRENT_USER
 - CURRENT_USER is automatically replaced with the user's Salesforce ID - use it exactly as shown
-- ALWAYS include useful fields in SELECT (Name, Status, Amount, etc. depending on object)
 - Use SOQL date literals for time-based filters (TODAY, THIS_WEEK, LAST_N_DAYS:7, etc.)
 
-MORE SOQL EXAMPLES:
-- "my leads" → SELECT Id, Name, Company, Status, Email, Phone FROM Lead WHERE OwnerId = CURRENT_USER ORDER BY CreatedDate DESC LIMIT 25
-- "accounts I own" → SELECT Id, Name, Industry, Phone FROM Account WHERE OwnerId = CURRENT_USER
-- "contacts at Acme" → SELECT Id, Name, Email, Phone, Title FROM Contact WHERE Account.Name LIKE '%Acme%'
+DEFAULT QUERIES - use minimal fields for quick responses:
+- "my leads" → SELECT Id, Name, Company, Status FROM Lead WHERE OwnerId = CURRENT_USER ORDER BY CreatedDate DESC LIMIT 10
+- "last payment" → SELECT Id, Name, CreatedDate FROM Payment__c ORDER BY CreatedDate DESC LIMIT 1
+
+DETAIL QUERIES - when user asks "more info", "more fields", "tell me more", "details":
+- Include ALL available fields from the object's field list
+- "more info about payment" → SELECT Id, Name, CreatedDate, Payment_Amount__c, Payment_Date__c, Payment_Method__c, Notes__c, Related_Account__c FROM Payment__c WHERE Id = 'xxx'
+- "show me all fields" → Include every field listed for that object in the CUSTOM OBJECTS section
 
 IMPORTANT RULES:
 - Keep responses SHORT and conversational (this is voice/text, not email)
@@ -124,6 +127,7 @@ interface ParsedIntent {
   fields?: Record<string, any>;
   clarificationQuestion?: string;
   response: string;
+  followUp?: string; // Suggested next action for the user
 }
 
 /**
@@ -139,7 +143,7 @@ export const askSalesforce = action({
     }))),
     userId: v.optional(v.id("users")), // For per-user Salesforce auth lookup
   },
-  handler: async (ctx, args): Promise<{ response: string; data?: any; action?: string; recordUrl?: string }> => {
+  handler: async (ctx, args): Promise<{ response: string; data?: any; action?: string; recordUrl?: string; followUp?: string }> => {
     // #region agent log (debug-session)
     fetch('http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A',location:'convex/ai.ts:askSalesforce:entry',message:'askSalesforce entry',data:{hasUserId:!!args.userId,userMessageLen:args.userMessage?.length ?? null,msgLowerHasMyLead:(args.userMessage||'').toLowerCase().includes('my lead'),msgLowerHasPipeline:(args.userMessage||'').toLowerCase().includes('pipeline')},timestamp:Date.now()})}).catch(()=>{});
     // #endregion agent log
@@ -188,13 +192,17 @@ export const askSalesforce = action({
           customObjectsContext = `\n\n## CUSTOM OBJECTS IN THIS ORG
 ${objectDescriptions}
 
-IMPORTANT RULES FOR CUSTOM OBJECTS:
-- Only query custom objects listed above
-- Use the EXACT field API names (ending in __c)
-- When querying messages/conversations, ALWAYS include the content field (e.g. sendblue__Message__c, Message__c, Content__c, Body, etc.)
-- Include relevant fields like Direction, From, To, Status in your SELECT
-- Always ORDER BY CreatedDate DESC for recent records
-- Example for messages: SELECT Id, Name, sendblue__Message__c, sendblue__Direction__c, sendblue__From__c, CreatedDate FROM sendblue__Message__c ORDER BY CreatedDate DESC LIMIT 5
+CRITICAL RULES FOR CUSTOM OBJECTS:
+1. ONLY use fields that are EXPLICITLY listed above for each object - if a field isn't in the list, it DOES NOT EXIST
+2. NEVER guess or assume field names - common mistakes:
+   - "Amount__c" is WRONG - the actual field might be "Payment_Amount__c" or "Invoice_Amount__c"
+   - "Date__c" is WRONG - look for "Payment_Date__c", "Due_Date__c", etc.
+   - Always use the EXACT full field name from the Fields list above
+3. Field names are case-sensitive and must end in __c for custom fields
+4. When constructing SOQL, ONLY SELECT fields that are shown in the object's Fields list
+5. Always include CreatedDate and ORDER BY CreatedDate DESC for recent records
+6. For messages/conversations, look for content fields like sendblue__Message__c, Message__c, Content__c
+7. If you're unsure about a field name, use ONLY the basic fields: Id, Name, CreatedDate
 `;
           console.log(`Loaded ${orgMetadata.customObjects.length} custom objects with rich metadata`);
         }
@@ -227,9 +235,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
             userId: args.userId,
           });
           return {
-            response: formatSearchResponse(searchResults, interpretation.objectType),
+            response: appendFollowUp(formatSearchResponse(searchResults, interpretation.objectType), interpretation.followUp),
             data: searchResults,
             action: "search",
+            followUp: interpretation.followUp,
           };
 
         case "query":
@@ -247,9 +256,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
               userId: args.userId,
             });
             return {
-              response: oppResults.summary + ". " + formatOpportunities(oppResults.opportunities),
+              response: appendFollowUp(oppResults.summary + ". " + formatOpportunities(oppResults.opportunities), interpretation.followUp),
               data: oppResults,
               action: "query",
+              followUp: interpretation.followUp,
             };
           }
 
@@ -260,9 +270,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
               userId: args.userId,
             });
             return {
-              response: formatTasks(taskResults.tasks),
+              response: appendFollowUp(formatTasks(taskResults.tasks), interpretation.followUp),
               data: taskResults,
               action: "query",
+              followUp: interpretation.followUp,
             };
           }
 
@@ -276,9 +287,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
               userId: args.userId,
             });
             return {
-              response: leadResults.summary + ". " + formatLeads(leadResults.leads),
+              response: appendFollowUp(leadResults.summary + ". " + formatLeads(leadResults.leads), interpretation.followUp),
               data: leadResults,
               action: "query",
+              followUp: interpretation.followUp,
             };
           }
 
@@ -289,9 +301,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
             });
             const summary = `You have ${accountResults.count} account${accountResults.count !== 1 ? 's' : ''}`;
             return {
-              response: summary + ". " + formatAccounts(accountResults.accounts),
+              response: appendFollowUp(summary + ". " + formatAccounts(accountResults.accounts), interpretation.followUp),
               data: accountResults,
               action: "query",
+              followUp: interpretation.followUp,
             };
           }
 
@@ -305,9 +318,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
               userId: args.userId,
             });
             return {
-              response: formatQueryResponse(queryResults, interpretation.objectType),
+              response: appendFollowUp(formatQueryResponse(queryResults, interpretation.objectType), interpretation.followUp),
               data: queryResults,
               action: "query",
+              followUp: interpretation.followUp,
             };
           }
           break;
@@ -340,10 +354,11 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
               userId: args.userId,
             });
             return {
-              response: interpretation.response || `Done! I created a new ${interpretation.objectType}.`,
+              response: appendFollowUp(interpretation.response || `Done! I created a new ${interpretation.objectType}.`, interpretation.followUp),
               data: createResult,
               action: "create",
               recordUrl: createResult.recordUrl,
+              followUp: interpretation.followUp,
             };
           }
           break;
@@ -357,9 +372,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
               userId: args.userId,
             });
             return {
-              response: interpretation.response || `Got it! I updated that ${interpretation.objectType}.`,
+              response: appendFollowUp(interpretation.response || `Got it! I updated that ${interpretation.objectType}.`, interpretation.followUp),
               data: updateResult,
               action: "update",
+              followUp: interpretation.followUp,
             };
           }
           // If we need to find the record first
@@ -379,9 +395,10 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
                 userId: args.userId,
               });
               return {
-                response: interpretation.response || `Done! I updated ${findResult.records[0].Name}.`,
+                response: appendFollowUp(interpretation.response || `Done! I updated ${findResult.records[0].Name}.`, interpretation.followUp),
                 data: updateResult,
                 action: "update",
+                followUp: interpretation.followUp,
               };
             } else {
               return {
@@ -400,12 +417,14 @@ IMPORTANT RULES FOR CUSTOM OBJECTS:
             userId: args.userId,
           });
           return {
-            response: interpretation.response || "I've logged this call in Salesforce.",
+            response: appendFollowUp(interpretation.response || "I've logged this call in Salesforce.", interpretation.followUp),
             data: logResult,
             action: "log_call",
+            followUp: interpretation.followUp,
           };
 
         case "clarify":
+          // No follow-up for clarification questions
           return {
             response: interpretation.clarificationQuestion || interpretation.response,
           };
@@ -444,17 +463,25 @@ Based on the user's message, determine what Salesforce action to take. Respond w
   "soql": "SELECT ... FROM ..." (if running a specific query),
   "fields": { "FieldName": "value" } (if creating/updating),
   "clarificationQuestion": "question to ask user" (if action is clarify),
-  "response": "what to say to the user (keep it SHORT for voice)"
+  "response": "what to say to the user (keep it SHORT for voice)",
+  "followUp": "a helpful next action suggestion (optional, keep SHORT)"
 }
 
+FOLLOW-UP SUGGESTIONS:
+- After every successful action, suggest a relevant next step the user might want to take
+- Keep follow-ups SHORT (under 10 words) and actionable
+- Make them contextually relevant to what was just done
+- Examples: "Want to add a follow-up task?", "Should I update the amount?", "Need contact details?"
+- Don't include followUp for clarify actions
+
 Examples:
-- "Show me my pipeline" → { "action": "query", "objectType": "Opportunity", "response": "Let me get your opportunities..." }
-- "Find Acme" → { "action": "search", "searchTerm": "Acme", "objectType": "Account", "response": "Searching for Acme..." }
-- "Update Acme deal to Negotiation" → { "action": "update", "objectType": "Opportunity", "searchTerm": "Acme", "fields": { "StageName": "Negotiation/Review" }, "response": "I'll update the Acme opportunity to Negotiation." }
-- "Create a task to call John tomorrow" → { "action": "create", "objectType": "Task", "fields": { "Subject": "Call John", "ActivityDate": "TOMORROW", "Status": "Not Started" }, "response": "Creating a task to call John tomorrow." }
-- "Create a case for Acme - their website is down" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Website is down", "Description": "Customer reported website is down", "Status": "New", "Priority": "High", "Origin": "Phone" }, "searchTerm": "Acme", "response": "Creating a high priority case for Acme about the website issue." }
-- "Open a support case for billing problem" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Billing problem", "Status": "New", "Priority": "Medium", "Origin": "Phone" }, "response": "Creating a support case for the billing problem." }
-- "Log this call" → { "action": "log_call", "fields": { "Subject": "Voice call via TalkCRM" }, "response": "I'll log this call for you." }
+- "Show me my pipeline" → { "action": "query", "objectType": "Opportunity", "response": "Let me get your opportunities...", "followUp": "Want details on any of these?" }
+- "Find Acme" → { "action": "search", "searchTerm": "Acme", "objectType": "Account", "response": "Searching for Acme...", "followUp": "Need to see their contacts?" }
+- "Update Acme deal to Negotiation" → { "action": "update", "objectType": "Opportunity", "searchTerm": "Acme", "fields": { "StageName": "Negotiation/Review" }, "response": "I'll update the Acme opportunity to Negotiation.", "followUp": "Should I create a follow-up task?" }
+- "Create a task to call John tomorrow" → { "action": "create", "objectType": "Task", "fields": { "Subject": "Call John", "ActivityDate": "TOMORROW", "Status": "Not Started" }, "response": "Creating a task to call John tomorrow.", "followUp": "Want to add notes or details?" }
+- "Create a case for Acme - their website is down" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Website is down", "Description": "Customer reported website is down", "Status": "New", "Priority": "High", "Origin": "Phone" }, "searchTerm": "Acme", "response": "Creating a high priority case for Acme about the website issue.", "followUp": "Need to assign it to someone?" }
+- "Open a support case for billing problem" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Billing problem", "Status": "New", "Priority": "Medium", "Origin": "Phone" }, "response": "Creating a support case for the billing problem.", "followUp": "Want to link it to an account?" }
+- "Log this call" → { "action": "log_call", "fields": { "Subject": "Voice call via TalkCRM" }, "response": "I'll log this call for you.", "followUp": "Should I create a follow-up task?" }
 - "Record an issue for customer" → { "action": "clarify", "clarificationQuestion": "Should I create a support case for a customer issue, or a task for your to-do list?", "response": "Should I create a support case for a customer issue, or a task for your to-do list?" }
 
 ONLY respond with the JSON object, no other text.`;
@@ -491,6 +518,16 @@ ONLY respond with the JSON object, no other text.`;
 // RESPONSE FORMATTERS (Keep responses short for voice!)
 // ============================================================================
 
+/**
+ * Append a follow-up suggestion to a response
+ * Keeps it conversational and short for voice/text
+ */
+function appendFollowUp(response: string, followUp?: string): string {
+  if (!followUp) return response;
+  // Add the follow-up on a new line or with a separator
+  return `${response}\n\n${followUp}`;
+}
+
 function formatSearchResponse(results: { records: any[]; totalSize: number }, objectType?: string): string {
   if (!results.records || results.records.length === 0) {
     return `I didn't find any ${objectType || "records"} matching that.`;
@@ -514,40 +551,42 @@ function formatQueryResponse(results: { records: any[]; totalSize: number }, obj
   const records = results.records;
   const count = results.totalSize;
 
-  // Content fields to look for (in priority order)
-  const contentFields = ["sendblue__Message__c", "Message__c", "Content__c", "Body", "Description", "Subject", "Name"];
+  // Fields to skip when displaying (system fields)
+  const skipFields = ["attributes", "Id", "OwnerId", "CreatedById", "LastModifiedById", "SystemModstamp"];
 
-  // Format each record fully (no truncation)
+  // Field label mappings for common fields
+  const fieldLabels: Record<string, string> = {
+    "Name": "Name",
+    "CreatedDate": "Created",
+    "Payment_Amount__c": "Amount",
+    "Payment_Date__c": "Date",
+    "Payment_Method__c": "Method",
+    "Payment_Reference_Number__c": "Reference",
+    "Related_Account__c": "Account",
+    "Related_Opportunity__c": "Opportunity",
+    "Invoice_Amount__c": "Amount",
+    "Due_Date__c": "Due Date",
+    "Status__c": "Status",
+    "Description": "Description",
+    "Notes__c": "Notes",
+  };
+
+  // Format each record with all available fields
   const formattedRecords = records.map((r: any, index: number) => {
-    // Find a content field
-    let content = "";
-    for (const field of contentFields) {
-      if (r[field]) {
-        content = String(r[field]);
-        break;
-      }
-    }
+    const num = index + 1;
+    const name = r.Name || r.Subject || `Record ${index + 1}`;
 
-    // Get metadata fields
-    const direction = r.sendblue__Direction__c || r.Direction__c || "";
-    const from = r.sendblue__From__c || r.From__c || "";
-    const to = r.sendblue__To__c || r.To__c || "";
-    const name = r.Name || r.Subject || "";
-    const date = r.sendblue__Date_Sent_Received__c || r.CreatedDate || "";
-
-    // Format timestamp if present
+    // Format timestamp
     let timeStr = "";
+    const date = r.CreatedDate;
     if (date) {
       const d = new Date(date);
       const now = new Date();
       const diffMs = now.getTime() - d.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
       const diffHours = Math.floor(diffMs / 3600000);
       const diffDays = Math.floor(diffMs / 86400000);
 
-      if (diffMins < 60) {
-        timeStr = `${diffMins}m ago`;
-      } else if (diffHours < 24) {
+      if (diffHours < 24) {
         timeStr = `${diffHours}h ago`;
       } else if (diffDays < 7) {
         timeStr = `${diffDays}d ago`;
@@ -556,21 +595,39 @@ function formatQueryResponse(results: { records: any[]; totalSize: number }, obj
       }
     }
 
-    // Build the formatted line
-    const num = index + 1;
-    if (direction && from && content) {
-      // Message format: "1. Inbound from +1234567890 (2h ago): Hey how are you"
-      const timeNote = timeStr ? ` (${timeStr})` : "";
-      return `${num}. ${direction} from ${from}${timeNote}: ${content}`;
-    } else if (content) {
-      const timeNote = timeStr ? ` (${timeStr})` : "";
-      return `${num}. ${content}${timeNote}`;
-    } else if (name) {
-      const timeNote = timeStr ? ` (${timeStr})` : "";
-      return `${num}. ${name}${timeNote}`;
-    } else {
-      return `${num}. Record ${r.Id?.slice(-6) || "unknown"}`;
+    // Collect all non-empty fields
+    const fieldValues: string[] = [];
+    for (const [key, value] of Object.entries(r)) {
+      if (skipFields.includes(key) || value === null || value === undefined || value === "") continue;
+      if (key === "Name" || key === "Subject" || key === "CreatedDate") continue; // Already shown in header
+
+      // Format the value
+      let displayValue = String(value);
+
+      // Format currency fields
+      if (key.includes("Amount") || key.includes("Price") || key.includes("Total")) {
+        const numVal = parseFloat(displayValue);
+        if (!isNaN(numVal)) {
+          displayValue = "$" + numVal.toLocaleString();
+        }
+      }
+
+      // Format date fields
+      if (key.includes("Date") && displayValue.includes("T")) {
+        displayValue = new Date(displayValue).toLocaleDateString();
+      }
+
+      // Get friendly label
+      const label = fieldLabels[key] || key.replace(/__c$/, "").replace(/_/g, " ");
+      fieldValues.push(`${label}: ${displayValue}`);
     }
+
+    // Build the output
+    const header = `${num}. **${name}**${timeStr ? ` (${timeStr})` : ""}`;
+    if (fieldValues.length > 0) {
+      return `${header}\n   ${fieldValues.join("\n   ")}`;
+    }
+    return header;
   });
 
   // Build the full response

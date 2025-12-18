@@ -319,9 +319,10 @@ export const syncFromSalesforce = internalAction({
         return a.name.localeCompare(b.name);
       });
 
-      // For custom objects, fetch rich field metadata (up to 20 objects)
+      // For custom objects, fetch rich field metadata for ALL objects
       const customObjectsWithFields: RichCustomObject[] = [];
-      const objectsToDescribe = prioritizedObjects.slice(0, 20);
+      // No limit - describe ALL custom objects to ensure AI has complete field info
+      const objectsToDescribe = prioritizedObjects;
 
       for (const obj of objectsToDescribe) {
         try {
@@ -338,26 +339,35 @@ export const syncFromSalesforce = internalAction({
 
           const objData = await objDescribeResponse.json();
 
-          // Filter to useful fields (skip system fields, prioritize content fields)
+          // Capture ALL queryable fields - the AI needs complete field info to construct valid SOQL
           const usefulFields = (objData.fields || [])
             .filter((f: any) => {
-              // Skip system/internal fields
-              if (["IsDeleted", "SystemModstamp", "LastViewedDate", "LastReferencedDate"].includes(f.name)) return false;
-              if (f.name.endsWith("ById") && f.type === "reference") return false; // Skip CreatedById, etc.
+              // Skip system/internal fields that are rarely useful
+              const skipFields = ["IsDeleted", "SystemModstamp", "LastViewedDate", "LastReferencedDate", "LastActivityDate"];
+              if (skipFields.includes(f.name)) return false;
 
-              // Include important fields
+              // Skip audit trail fields (CreatedById, LastModifiedById, etc.)
+              if (f.name.endsWith("ById") && f.type === "reference") return false;
+
+              // Skip compound address/geolocation subfields
+              if (f.compound) return false;
+
+              // Include standard fields
               if (f.name === "Id" || f.name === "Name" || f.name === "CreatedDate") return true;
               if (f.nameField) return true; // The main name field
 
-              // Include custom fields with useful types
+              // Include ALL custom fields (__c) - these are what users care about
               if (f.name.endsWith("__c")) {
-                const usefulTypes = ["string", "textarea", "phone", "email", "url", "currency", "double", "percent", "date", "datetime", "picklist", "reference", "boolean"];
-                return usefulTypes.includes(f.type);
+                return true; // Include all custom fields regardless of type
               }
+
+              // Include common standard fields on custom objects
+              const commonStandardFields = ["OwnerId", "RecordTypeId", "CurrencyIsoCode", "Description"];
+              if (commonStandardFields.includes(f.name)) return true;
 
               return false;
             })
-            .slice(0, 12) // Limit to 12 most important fields
+            // NO LIMIT - capture ALL fields so AI can construct valid queries
             .map((f: any) => ({
               name: f.name,
               label: f.label,
@@ -427,10 +437,7 @@ export const syncFromSalesforce = internalAction({
         }
       }
 
-      // Add remaining objects without detailed field info
-      for (const obj of prioritizedObjects.slice(20)) {
-        customObjectsWithFields.push({ ...obj });
-      }
+      // All objects have been described - no need for fallback since we removed the limit
 
       // Store the metadata
       await ctx.runMutation(internal.orgMetadata.upsert, {
