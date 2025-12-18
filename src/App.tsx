@@ -95,6 +95,7 @@ function AuthenticatedApp({ user }: { user: AuthUser }) {
     return (
       <OnboardingFlow
         userName={user.name}
+        userEmail={user.email}
         onComplete={() => {
           localStorage.setItem("talkcrm_onboarding_complete", "true");
           setShowOnboarding(false);
@@ -117,20 +118,49 @@ function AuthenticatedApp({ user }: { user: AuthUser }) {
 // ONBOARDING FLOW - Guide new users through setup
 // ============================================================================
 
-function OnboardingFlow({ userName, onComplete }: { userName: string; onComplete: () => void }) {
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+type OnboardingStep = 'confirm-company' | 'admin-check' | 'admin-setup' | 'schedule-call';
+
+function OnboardingFlow({ userName, userEmail, onComplete }: { userName: string; userEmail: string; onComplete: () => void }) {
+  const [step, setStep] = useState<OnboardingStep>('confirm-company');
+  const [companyName, setCompanyName] = useState(() => {
+    const domain = userEmail.split('@')[1];
+    if (!domain) return '';
+    // Extract company name from domain
+    const name = domain.split('.')[0];
+    // Capitalize first letter
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  });
+
+  const handleCompanyConfirmed = () => {
+    setStep('admin-check');
+  };
+
+  const handleAdminSelect = (isAdmin: boolean) => {
+    setStep(isAdmin ? 'admin-setup' : 'schedule-call');
+  };
 
   return (
     <div className="min-h-screen bg-[#fafafa] flex items-center justify-center p-4">
       {/* Subtle grid background */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:14px_24px]" />
 
-      <div className="w-full max-w-xl relative z-10">
-        {isAdmin === null ? (
-          <AdminCheckCard userName={userName} onSelect={setIsAdmin} />
-        ) : isAdmin ? (
+      <div className="w-full max-w-md relative z-10">
+        {step === 'confirm-company' && (
+          <CompanyConfirmCard
+            userName={userName}
+            userEmail={userEmail}
+            companyName={companyName}
+            onCompanyChange={setCompanyName}
+            onContinue={handleCompanyConfirmed}
+          />
+        )}
+        {step === 'admin-check' && (
+          <AdminCheckCard companyName={companyName} onSelect={handleAdminSelect} />
+        )}
+        {step === 'admin-setup' && (
           <AdminSetupCard onComplete={onComplete} />
-        ) : (
+        )}
+        {step === 'schedule-call' && (
           <ScheduleCallCard onComplete={onComplete} />
         )}
       </div>
@@ -138,20 +168,120 @@ function OnboardingFlow({ userName, onComplete }: { userName: string; onComplete
   );
 }
 
-function AdminCheckCard({ userName, onSelect }: { userName: string; onSelect: (isAdmin: boolean) => void }) {
+// ============================================================================
+// COMPANY CONFIRMATION CARD - Vercel/Resend style
+// ============================================================================
+
+function CompanyConfirmCard({
+  userName,
+  userEmail,
+  companyName,
+  onCompanyChange,
+  onContinue,
+}: {
+  userName: string;
+  userEmail: string;
+  companyName: string;
+  onCompanyChange: (name: string) => void;
+  onContinue: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="p-8 pb-6">
+        <div className="flex items-center justify-center mb-6">
+          <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
+        <h1 className="text-xl font-semibold text-slate-900 text-center tracking-tight">
+          Welcome to TalkCRM
+        </h1>
+        <p className="text-sm text-slate-500 text-center mt-1">
+          Confirm your details to get started
+        </p>
+      </div>
+
+      {/* User Info */}
+      <div className="px-8 pb-6">
+        <div className="space-y-3">
+          {/* Name */}
+          <div className="flex items-center justify-between py-3 border-b border-slate-100">
+            <span className="text-sm text-slate-500">Name</span>
+            <span className="text-sm font-medium text-slate-900">{userName}</span>
+          </div>
+
+          {/* Email */}
+          <div className="flex items-center justify-between py-3 border-b border-slate-100">
+            <span className="text-sm text-slate-500">Email</span>
+            <span className="text-sm font-medium text-slate-900">{userEmail}</span>
+          </div>
+
+          {/* Company */}
+          <div className="flex items-center justify-between py-3">
+            <span className="text-sm text-slate-500">Company</span>
+            {isEditing ? (
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => onCompanyChange(e.target.value)}
+                onBlur={() => setIsEditing(false)}
+                onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
+                autoFocus
+                className="text-sm font-medium text-slate-900 text-right bg-slate-50 border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent w-40"
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-1.5 text-sm font-medium text-slate-900 hover:text-slate-600 transition-colors group"
+              >
+                {companyName || 'Add company'}
+                <svg className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-8 py-6 bg-slate-50 border-t border-slate-100">
+        <button
+          onClick={onContinue}
+          className="w-full py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
+        >
+          Continue
+        </button>
+        <p className="text-xs text-slate-400 text-center mt-3">
+          By continuing, you agree to our{' '}
+          <a href="/terms" className="text-slate-500 hover:text-slate-700 underline underline-offset-2">Terms</a>
+          {' '}and{' '}
+          <a href="/privacy" className="text-slate-500 hover:text-slate-700 underline underline-offset-2">Privacy Policy</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AdminCheckCard({ companyName, onSelect }: { companyName: string; onSelect: (isAdmin: boolean) => void }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-8">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-14 h-14 bg-slate-900 rounded-xl mb-4">
-          <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl mb-4">
+          <svg className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <h1 className="text-2xl font-semibold text-slate-900 tracking-tight mb-2">
-          Welcome, {userName.split(" ")[0]}!
+        <h1 className="text-xl font-semibold text-slate-900 tracking-tight mb-2">
+          Connect {companyName}'s Salesforce
         </h1>
-        <p className="text-slate-500">
-          Let's get TalkCRM connected to your Salesforce
+        <p className="text-sm text-slate-500">
+          One quick question to guide your setup
         </p>
       </div>
 

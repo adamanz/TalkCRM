@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import {
   Phone,
   Mic,
@@ -24,6 +24,7 @@ interface LandingPageProps {
 
 export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPageProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
 
@@ -49,14 +50,14 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
             <div className="hidden md:flex items-center gap-8">
               <a href="#features" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Features</a>
               <a href="#how-it-works" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">How it works</a>
-              <a href="#pricing" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Pricing</a>
+              <a href="#demo" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Demo</a>
             </div>
 
             <div className="hidden md:flex items-center gap-3">
               <button onClick={onLogin} className="text-sm text-slate-600 hover:text-slate-900 transition-colors px-3 py-1.5">
                 Log in
               </button>
-              <button onClick={onSignup} className="text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">
+              <button onClick={() => setShowAdminModal(true)} className="text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">
                 Get started
               </button>
             </div>
@@ -81,10 +82,10 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
             <div className="px-4 py-4 space-y-3">
               <a href="#features" className="block text-sm text-slate-600 hover:text-slate-900">Features</a>
               <a href="#how-it-works" className="block text-sm text-slate-600 hover:text-slate-900">How it works</a>
-              <a href="#pricing" className="block text-sm text-slate-600 hover:text-slate-900">Pricing</a>
+              <a href="#demo" className="block text-sm text-slate-600 hover:text-slate-900">Demo</a>
               <div className="pt-3 border-t border-slate-100 space-y-2">
                 <button onClick={onLogin} className="block w-full text-left text-sm text-slate-600">Log in</button>
-                <button onClick={onSignup} className="block w-full text-sm font-medium text-slate-900">Sign up</button>
+                <button onClick={() => setShowAdminModal(true)} className="block w-full text-sm font-medium text-slate-900">Sign up</button>
               </div>
             </div>
           </motion.div>
@@ -93,7 +94,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
 
       <main>
         {/* Hero Section */}
-        <section className="pt-32 pb-20 px-4 sm:px-6 relative overflow-hidden">
+        <section className="pt-28 pb-12 px-4 sm:px-6 relative overflow-hidden">
           <div className="max-w-3xl mx-auto text-center relative z-10">
             {/* Badge */}
             <motion.div
@@ -115,7 +116,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
             >
               Update Salesforce
               <br />
-              <span className="text-slate-400">in 30 seconds, hands-free</span>
+              <span className="text-slate-400">with your voice</span>
             </motion.h1>
 
             {/* Subheadline */}
@@ -136,7 +137,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               className="flex flex-col sm:flex-row items-center justify-center gap-3"
             >
               <button
-                onClick={onSignup}
+                onClick={() => setShowAdminModal(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
               >
                 Start for free
@@ -177,7 +178,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
         </section>
 
         {/* Demo Video */}
-        <section id="demo" className="px-4 sm:px-6 pb-32">
+        <section id="demo" className="px-4 sm:px-6 pb-16">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -212,7 +213,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
         </section>
 
         {/* Features */}
-        <section id="features" className="py-24 bg-slate-50/50">
+        <section id="features" className="py-16 bg-slate-50/50">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -270,7 +271,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
         </section>
 
         {/* How It Works */}
-        <section id="how-it-works" className="py-24">
+        <section id="how-it-works" className="py-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -307,7 +308,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
         </section>
 
         {/* Social Proof */}
-        <section className="py-16 border-y border-slate-100">
+        <section className="py-12 border-y border-slate-100">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <motion.div
               initial={{ opacity: 0 }}
@@ -315,21 +316,29 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               viewport={{ once: true }}
               className="text-center"
             >
-              <p className="text-xs text-slate-400 uppercase tracking-wider mb-8">
-                Trusted by sales teams at
+              <p className="text-xs text-slate-400 uppercase tracking-wider mb-6">
+                Trusted by teams at
               </p>
-              <div className="flex items-center justify-center gap-12 opacity-40 grayscale">
-                <div className="text-xl font-semibold text-slate-400">Acme</div>
-                <div className="text-xl font-semibold text-slate-400">Globex</div>
-                <div className="text-xl font-semibold text-slate-400">Initech</div>
-                <div className="text-xl font-semibold text-slate-400">Umbrella</div>
+              <div className="flex items-center justify-center">
+                <a
+                  href="https://oxycell.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group px-6 py-3 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  <img
+                    src="https://cdn-ilceldn.nitrocdn.com/CJGqQwhwxPOyFlORheqVaqrnMrtRUJVb/assets/images/optimized/rev-ecc90af/www.oxycell.com/wp-content/uploads/elementor/thumbs/OxyCell-Logo-qqftsrdt25gdzz2gx15mulva3eyjkcns0pyjd8e5dq.png"
+                    alt="Oxycell"
+                    className="h-10 w-auto opacity-80 group-hover:opacity-100 transition-opacity"
+                  />
+                </a>
               </div>
             </motion.div>
           </div>
         </section>
 
         {/* CTA Section */}
-        <section className="py-24">
+        <section className="py-16">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -343,7 +352,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
                 Get 5+ hours back every week. Your reps will actually use Salesforce when it only takes 30 seconds.
               </p>
               <button
-                onClick={onSignup}
+                onClick={() => setShowAdminModal(true)}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
               >
                 Start free trial
@@ -356,6 +365,90 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
           </div>
         </section>
       </main>
+
+      {/* Admin Question Modal */}
+      <AnimatePresence>
+        {showAdminModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowAdminModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setShowAdminModal(false)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Icon */}
+              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                <Shield className="w-7 h-7 text-slate-700" />
+              </div>
+
+              {/* Question */}
+              <h3 className="text-xl font-semibold text-slate-900 text-center mb-3">
+                Are you a Salesforce admin?
+              </h3>
+              <p className="text-sm text-slate-500 text-center mb-8">
+                This helps us give you the right setup experience for TalkCRM.
+              </p>
+
+              {/* Options */}
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setShowAdminModal(false);
+                    onSignup();
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center">
+                      <CheckCircle2 className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-slate-900">Yes, I'm an admin</p>
+                      <p className="text-xs text-slate-500">I can install packages in my org</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowAdminModal(false);
+                    window.open('https://cal.com/team/simple/talk-crm-onboarding', '_blank');
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                      <Calendar className="w-5 h-5 text-slate-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-slate-900">No, I'm not an admin</p>
+                      <p className="text-xs text-slate-500">Schedule a call with our team</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <footer className="border-t border-slate-100 py-12">
@@ -382,8 +475,18 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               </button>
               <a href="mailto:hello@talkcrm.io" className="hover:text-slate-600 transition-colors">Contact</a>
             </div>
-            <p className="text-sm text-slate-400">
-              © {new Date().getFullYear()} TalkCRM
+          </div>
+          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-400">
+              © 2025 Collective Consciousness LLC · Made by the team at{" "}
+              <a
+                href="https://thesimple.co/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                The Simple Co
+              </a>
             </p>
           </div>
         </div>
