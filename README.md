@@ -4,6 +4,11 @@
 
 Sales reps spend 5.5 hours per week on CRM data entry. TalkCRM lets them do it hands-free in 30 seconds from their car.
 
+## Install Salesforce Package
+
+[![Install in Production](https://img.shields.io/badge/Install%20in-Production-blue?style=for-the-badge&logo=salesforce)](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tfo000001Fa2bAAC)
+[![Install in Sandbox](https://img.shields.io/badge/Install%20in-Sandbox-green?style=for-the-badge&logo=salesforce)](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tfo000001Fa2bAAC)
+
 ## Architecture
 
 ```
@@ -166,10 +171,23 @@ npx convex dev
 Set environment variables in Convex dashboard:
 
 ```bash
+# Google OAuth (required for user authentication)
+npx convex env set GOOGLE_CLIENT_ID "your_google_client_id"
+npx convex env set GOOGLE_CLIENT_SECRET "your_google_client_secret"
+npx convex env set AUTH_SECRET "your_random_secret_key"  # Generate with: openssl rand -base64 32
+npx convex env set CONVEX_SITE_URL "https://your-deployment.convex.site"
+
+# Salesforce (optional - for Salesforce integration)
 npx convex env set SALESFORCE_ACCESS_TOKEN "your_token"
 npx convex env set SALESFORCE_INSTANCE_URL "https://yourorg.my.salesforce.com"
-npx convex env set ANTHROPIC_API_KEY "your_key"  # For AI assistant
+
+# AI Assistant
+npx convex env set ANTHROPIC_API_KEY "your_key"
 ```
+
+**Important for Google OAuth:**
+- In Google Cloud Console, add authorized redirect URI: `https://your-deployment.convex.site/api/auth/callback/google`
+- Replace `your-deployment` with your actual Convex deployment name
 
 ### 3. Configure ElevenLabs
 
