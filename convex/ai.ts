@@ -252,7 +252,15 @@ PHONE/LEAD LOOKUP PATTERNS (use these when asked about leads/contacts for a phon
     // Call Claude to interpret the request
     // Limit context to last 10 messages for performance
     const recentMessages = messages.slice(-10);
-    const interpretation = await interpretWithClaude(recentMessages, customObjectsContext);
+    let interpretation: ParsedIntent;
+    try {
+      interpretation = await interpretWithClaude(recentMessages, customObjectsContext);
+    } catch (error: any) {
+      console.error("Error interpreting request with Claude:", error);
+      return {
+        response: error.message || "I'm having trouble understanding that right now. Could you try rephrasing?",
+      };
+    }
 
     // #region agent log (debug-session)
     fetch('http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A',location:'convex/ai.ts:askSalesforce:interpretation',message:'askSalesforce interpretation summary',data:{action:(interpretation as any)?.action ?? null,objectType:(interpretation as any)?.objectType ?? null,hasSoql:!!(interpretation as any)?.soql,soqlLen:typeof (interpretation as any)?.soql==='string'?(interpretation as any).soql.length:null,soqlHasCURRENT_USER:typeof (interpretation as any)?.soql==='string'?(interpretation as any).soql.includes('CURRENT_USER'):null,soqlHasCurlyUserId:typeof (interpretation as any)?.soql==='string'?(/\{userId\}/.test((interpretation as any).soql)):null},timestamp:Date.now()})}).catch(()=>{});
@@ -524,30 +532,46 @@ IMPORTANT FOR CASES: When a customer name is mentioned (e.g., "case for John Smi
 
 ONLY respond with the JSON object, no other text.`;
 
-  const client = new Anthropic();
-
-  const response = await client.messages.create({
-    model: "claude-opus-4-5-20251101",
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: messages,
-  });
-
-  const content = response.content[0].type === "text" ? response.content[0].text : "{}";
-
   try {
-    // Extract JSON from the response (handle potential markdown code blocks)
-    let jsonStr = content;
-    if (content.includes("```")) {
-      const match = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) jsonStr = match[1];
+    // Check for API key
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error("ANTHROPIC_API_KEY is not configured");
+      throw new Error("AI service is not configured. Please contact support.");
     }
-    return JSON.parse(jsonStr.trim());
-  } catch (e) {
-    console.error("Failed to parse Claude response:", content);
+
+    const client = new Anthropic({ apiKey });
+
+    const response = await client.messages.create({
+      model: "claude-opus-4-5-20251101",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: messages,
+    });
+
+    const content = response.content[0].type === "text" ? response.content[0].text : "{}";
+
+    try {
+      // Extract JSON from the response (handle potential markdown code blocks)
+      let jsonStr = content;
+      if (content.includes("```")) {
+        const match = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (match) jsonStr = match[1];
+      }
+      return JSON.parse(jsonStr.trim());
+    } catch (e) {
+      console.error("Failed to parse Claude response:", content);
+      return {
+        action: "clarify",
+        response: "I didn't quite catch that. Could you say it another way?",
+      };
+    }
+  } catch (error: any) {
+    console.error("Error calling Claude API:", error);
+    // Return a safe fallback response
     return {
       action: "clarify",
-      response: "I didn't quite catch that. Could you say it another way?",
+      response: error.message || "I'm having trouble processing that right now. Please try again.",
     };
   }
 }

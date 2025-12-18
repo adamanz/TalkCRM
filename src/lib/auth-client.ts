@@ -1,17 +1,24 @@
-import { useAuthActions } from "@convex-dev/auth/react";
+import { useAuth } from "@workos-inc/authkit-react";
 
-// Google sign-in helper hook
+// WorkOS sign-in helper hook
 export const useSignInWithGoogle = () => {
-  const { signIn } = useAuthActions();
+  const { signIn } = useAuth();
 
   return async () => {
-    await signIn("google", { redirectTo: window.location.origin });
+    try {
+      // WorkOS AuthKit handles the OAuth flow automatically
+      // This will redirect to WorkOS hosted UI which supports Google
+      await signIn();
+    } catch (error: any) {
+      console.error("WorkOS sign-in error:", error);
+      throw error;
+    }
   };
 };
 
 // Sign out helper hook
 export const useHandleSignOut = () => {
-  const { signOut } = useAuthActions();
+  const { signOut } = useAuth();
 
   return async () => {
     await signOut();

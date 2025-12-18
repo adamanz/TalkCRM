@@ -18,7 +18,15 @@ export function LoginPage({ onBack }: LoginPageProps) {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      setError(err.message || "Failed to sign in with Google");
+      console.error("Google sign-in error:", err);
+      // Provide more helpful error messages
+      let errorMessage = "Failed to sign in with Google";
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.toString().includes("Server Error")) {
+        errorMessage = "Server error during authentication. Please check that Google OAuth is properly configured in your Convex dashboard (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, AUTH_SECRET, and CONVEX_SITE_URL).";
+      }
+      setError(errorMessage);
       setIsLoading(false);
     }
   };
@@ -56,9 +64,15 @@ export function LoginPage({ onBack }: LoginPageProps) {
         >
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-10 h-10 bg-slate-900 rounded-lg mb-4">
-              <Phone className="w-5 h-5 text-white" />
-            </div>
+            <a
+              href="https://talkcrm.app/"
+              className="inline-block"
+              aria-label="Go to TalkCRM homepage"
+            >
+              <div className="inline-flex items-center justify-center w-10 h-10 bg-slate-900 rounded-lg mb-4 hover:bg-slate-800 transition-colors cursor-pointer">
+                <Phone className="w-5 h-5 text-white" />
+              </div>
+            </a>
             <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Sign in to TalkCRM</h1>
             <p className="text-sm text-slate-500 mt-1.5">Voice-powered Salesforce assistant</p>
           </div>
@@ -132,7 +146,12 @@ export function LoginPage({ onBack }: LoginPageProps) {
       {/* Footer */}
       <footer className="relative z-10 px-6 py-4 text-center">
         <p className="text-xs text-slate-400">
-          TalkCRM © {new Date().getFullYear()}
+          <a
+            href="https://talkcrm.app/"
+            className="hover:text-slate-600 transition-colors"
+          >
+            TalkCRM
+          </a> © {new Date().getFullYear()}
         </p>
       </footer>
     </div>

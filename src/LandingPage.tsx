@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
   Phone,
   Mic,
@@ -9,7 +9,6 @@ import {
   Shield,
   ArrowRight,
   Play,
-  CheckCircle2,
   Sparkles,
   Menu,
   X
@@ -24,7 +23,6 @@ interface LandingPageProps {
 
 export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPageProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showAdminModal, setShowAdminModal] = useState(false);
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
 
@@ -57,7 +55,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               <button onClick={onLogin} className="text-sm text-slate-600 hover:text-slate-900 transition-colors px-3 py-1.5">
                 Log in
               </button>
-              <button onClick={() => setShowAdminModal(true)} className="text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">
+              <button onClick={onSignup} className="text-sm font-medium bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">
                 Get started
               </button>
             </div>
@@ -85,7 +83,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               <a href="#demo" className="block text-sm text-slate-600 hover:text-slate-900">Demo</a>
               <div className="pt-3 border-t border-slate-100 space-y-2">
                 <button onClick={onLogin} className="block w-full text-left text-sm text-slate-600">Log in</button>
-                <button onClick={() => setShowAdminModal(true)} className="block w-full text-sm font-medium text-slate-900">Sign up</button>
+                <button onClick={onSignup} className="block w-full text-sm font-medium text-slate-900">Sign up</button>
               </div>
             </div>
           </motion.div>
@@ -137,7 +135,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               className="flex flex-col sm:flex-row items-center justify-center gap-3"
             >
               <button
-                onClick={() => setShowAdminModal(true)}
+                onClick={onSignup}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
               >
                 Start for free
@@ -352,7 +350,7 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
                 Get 5+ hours back every week. Your reps will actually use Salesforce when it only takes 30 seconds.
               </p>
               <button
-                onClick={() => setShowAdminModal(true)}
+                onClick={onSignup}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
               >
                 Start free trial
@@ -365,90 +363,6 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
           </div>
         </section>
       </main>
-
-      {/* Admin Question Modal */}
-      <AnimatePresence>
-        {showAdminModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowAdminModal(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.2 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close button */}
-              <button
-                onClick={() => setShowAdminModal(false)}
-                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              {/* Icon */}
-              <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-                <Shield className="w-7 h-7 text-slate-700" />
-              </div>
-
-              {/* Question */}
-              <h3 className="text-xl font-semibold text-slate-900 text-center mb-3">
-                Are you a Salesforce admin?
-              </h3>
-              <p className="text-sm text-slate-500 text-center mb-8">
-                This helps us give you the right setup experience for TalkCRM.
-              </p>
-
-              {/* Options */}
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    setShowAdminModal(false);
-                    onSignup();
-                  }}
-                  className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center">
-                      <CheckCircle2 className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-slate-900">Yes, I'm an admin</p>
-                      <p className="text-xs text-slate-500">I can install packages in my org</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                </button>
-
-                <button
-                  onClick={() => {
-                    setShowAdminModal(false);
-                    window.open('https://cal.com/team/simple/talk-crm-onboarding', '_blank');
-                  }}
-                  className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-slate-600" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-slate-900">No, I'm not an admin</p>
-                      <p className="text-xs text-slate-500">Schedule a call with our team</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Footer */}
       <footer className="border-t border-slate-100 py-12">

@@ -13,7 +13,6 @@ import type * as agentSessions from "../agentSessions.js";
 import type * as ai from "../ai.js";
 import type * as analytics from "../analytics.js";
 import type * as anam from "../anam.js";
-import type * as auth from "../auth.js";
 import type * as conversations from "../conversations.js";
 import type * as crons from "../crons.js";
 import type * as dealCoach from "../dealCoach.js";
@@ -39,7 +38,6 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   analytics: typeof analytics;
   anam: typeof anam;
-  auth: typeof auth;
   conversations: typeof conversations;
   crons: typeof crons;
   dealCoach: typeof dealCoach;
