@@ -122,6 +122,21 @@ export const getRecentMessages = internalQuery({
 });
 
 /**
+ * Get a message by its SendBlue message handle (for deduplication)
+ */
+export const getByMessageHandle = internalQuery({
+  args: {
+    messageHandle: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("textMessages")
+      .withIndex("by_message_handle", (q) => q.eq("messageHandle", args.messageHandle))
+      .first();
+  },
+});
+
+/**
  * Update message status (for delivery callbacks)
  */
 export const updateMessageStatus = internalMutation({

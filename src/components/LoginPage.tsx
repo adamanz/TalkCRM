@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Phone, ArrowLeft, Mic, Shield, RefreshCw, Loader2 } from "lucide-react";
-import { signInWithGoogle } from "@/lib/auth-client";
+import { useSignInWithGoogle } from "@/lib/auth-client";
 
 interface LoginPageProps {
   onBack?: () => void;
@@ -10,6 +10,7 @@ interface LoginPageProps {
 export function LoginPage({ onBack }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const signInWithGoogle = useSignInWithGoogle();
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);

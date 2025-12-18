@@ -192,6 +192,14 @@ export const askSalesforce = action({
                   }
                   if (field.referenceTo) {
                     fieldDesc += ` → ${field.referenceTo}`;
+                    // Include relationship name for traversing lookups
+                    if ((field as any).relationshipName) {
+                      fieldDesc += ` (use ${(field as any).relationshipName} for related fields)`;
+                    }
+                  }
+                  // Flag phone/contact number fields for lookup guidance
+                  if (field.name.toLowerCase().includes('phone') || field.name.toLowerCase().includes('contact_number')) {
+                    fieldDesc += ` [PHONE - E.164 format]`;
                   }
                   desc += `\n${fieldDesc}`;
                 } else {
@@ -222,6 +230,13 @@ CRITICAL RULES FOR CUSTOM OBJECTS:
 5. Always include CreatedDate and ORDER BY CreatedDate DESC for recent records
 6. For messages/conversations, look for content fields like sendblue__Message__c, Message__c, Content__c
 7. If you're unsure about a field name, use ONLY the basic fields: Id, Name, CreatedDate
+
+PHONE/LEAD LOOKUP PATTERNS (use these when asked about leads/contacts for a phone number):
+- "Is there a lead for +18185881911?" → Query the Conversation object by phone, check the Lead lookup:
+  SELECT Id, sendblue__Lead__c, sendblue__Lead__r.Name, sendblue__Lead__r.Company FROM sendblue__Conversation__c WHERE sendblue__Contact_Number__c = '+18185881911' LIMIT 1
+- If sendblue__Lead__c is NULL in the result, respond "No lead is linked to this conversation"
+- If sendblue__Lead__c has a value, respond with the lead details from sendblue__Lead__r fields
+- NEVER just return all leads - always filter by the specific phone number first
 `;
           console.log(`Loaded ${orgMetadata.customObjects.length} custom objects with rich metadata`);
         }
@@ -265,8 +280,8 @@ CRITICAL RULES FOR CUSTOM OBJECTS:
           const msgLower = args.userMessage.toLowerCase();
           const objTypeLower = (interpretation.objectType || "").toLowerCase();
 
-          // My Opportunities / Pipeline / Deals
-          if (objTypeLower === "opportunity" || msgLower.includes("pipeline") || msgLower.includes("my opportunit") || msgLower.includes("my deal")) {
+          // My Opportunities / Pipeline / Deals - BUT only if no specific SOQL query
+          if ((objTypeLower === "opportunity" || msgLower.includes("pipeline") || msgLower.includes("my opportunit") || msgLower.includes("my deal")) && !interpretation.soql) {
             // #region agent log (debug-session)
             fetch('http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A',location:'convex/ai.ts:askSalesforce:route',message:'routing to getMyOpportunities',data:{objTypeLower,matchedByPipeline:msgLower.includes('pipeline'),matchedByMyDeal:msgLower.includes('my deal')},timestamp:Date.now()})}).catch(()=>{});
             // #endregion agent log
@@ -282,8 +297,8 @@ CRITICAL RULES FOR CUSTOM OBJECTS:
             };
           }
 
-          // My Tasks / To-dos
-          if (objTypeLower === "task" || msgLower.includes("my task") || msgLower.includes("my to-do") || msgLower.includes("my todo")) {
+          // My Tasks / To-dos - BUT only if no specific SOQL query
+          if ((objTypeLower === "task" || msgLower.includes("my task") || msgLower.includes("my to-do") || msgLower.includes("my todo")) && !interpretation.soql) {
             const taskResults = await ctx.runAction(api.salesforce.getMyTasks, {
               status: "open",
               userId: args.userId,
@@ -296,8 +311,9 @@ CRITICAL RULES FOR CUSTOM OBJECTS:
             };
           }
 
-          // My Leads
-          if (objTypeLower === "lead" || msgLower.includes("my lead")) {
+          // My Leads - BUT only if no specific SOQL query was generated
+          // If Claude generated SOQL (e.g., for phone lookup), let it execute instead
+          if ((objTypeLower === "lead" || msgLower.includes("my lead")) && !interpretation.soql) {
             // #region agent log (debug-session)
             fetch('http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A',location:'convex/ai.ts:askSalesforce:route',message:'routing to getMyLeads',data:{objTypeLower,matchedByMyLead:msgLower.includes('my lead')},timestamp:Date.now()})}).catch(()=>{});
             // #endregion agent log
@@ -313,8 +329,8 @@ CRITICAL RULES FOR CUSTOM OBJECTS:
             };
           }
 
-          // My Accounts
-          if (objTypeLower === "account" || msgLower.includes("my account")) {
+          // My Accounts - BUT only if no specific SOQL query
+          if ((objTypeLower === "account" || msgLower.includes("my account")) && !interpretation.soql) {
             const accountResults = await ctx.runAction(api.salesforce.getMyAccounts, {
               userId: args.userId,
             });
@@ -499,7 +515,10 @@ Examples:
 - "Update Acme deal to Negotiation" → { "action": "update", "objectType": "Opportunity", "searchTerm": "Acme", "fields": { "StageName": "Negotiation/Review" }, "response": "I'll update the Acme opportunity to Negotiation.", "followUp": "Should I create a follow-up task?" }
 - "Create a task to call John tomorrow" → { "action": "create", "objectType": "Task", "fields": { "Subject": "Call John", "ActivityDate": "TOMORROW", "Status": "Not Started" }, "response": "Creating a task to call John tomorrow.", "followUp": "Want to add notes or details?" }
 - "Create a case for Acme - their website is down" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Website is down", "Description": "Customer reported website is down", "Status": "New", "Priority": "High", "Origin": "Phone" }, "searchTerm": "Acme", "response": "Creating a high priority case for Acme about the website issue.", "followUp": "Need to assign it to someone?" }
+- "Create a case for Adam Smith - pressure issues with chamber" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Chamber pressure issues", "Description": "Customer reporting pressure issues with their chamber", "Status": "New", "Priority": "High", "Origin": "Phone" }, "searchTerm": "Adam Smith", "response": "Creating a case for Adam Smith about chamber pressure issues.", "followUp": "Should I link it to an account?" }
 - "Open a support case for billing problem" → { "action": "create", "objectType": "Case", "fields": { "Subject": "Billing problem", "Status": "New", "Priority": "Medium", "Origin": "Phone" }, "response": "Creating a support case for the billing problem.", "followUp": "Want to link it to an account?" }
+
+IMPORTANT FOR CASES: When a customer name is mentioned (e.g., "case for John Smith", "case for Acme"), ALWAYS include "searchTerm" with the customer/company name so we can link it to their Account/Lead.
 - "Log this call" → { "action": "log_call", "fields": { "Subject": "Voice call via TalkCRM" }, "response": "I'll log this call for you.", "followUp": "Should I create a follow-up task?" }
 - "Record an issue for customer" → { "action": "clarify", "clarificationQuestion": "Should I create a support case for a customer issue, or a task for your to-do list?", "response": "Should I create a support case for a customer issue, or a task for your to-do list?" }
 

@@ -1,7 +1,8 @@
 import { useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useState, useEffect } from "react";
-import { useSession, handleSignOut } from "@/lib/auth-client";
+import { useHandleSignOut } from "@/lib/auth-client";
 import LoginPage from "@/components/LoginPage";
 import TermsPage from "@/components/TermsPage";
 import PrivacyPage from "@/components/PrivacyPage";
@@ -33,9 +34,15 @@ function useSimpleRouter() {
 // ============================================================================
 
 export default function App() {
-  const { data: session, isPending } = useSession();
+  const { isLoading, isAuthenticated } = useConvexAuth();
   const [showAuth, setShowAuth] = useState(false);
   const { path, navigate } = useSimpleRouter();
+
+  // Query current user when authenticated
+  const currentUser = useQuery(
+    api.users.getCurrentUser,
+    isAuthenticated ? {} : "skip"
+  );
 
   // Handle legal pages (accessible without auth)
   if (path === "/terms") {
@@ -45,7 +52,7 @@ export default function App() {
     return <PrivacyPage onBack={() => navigate("/")} />;
   }
 
-  if (isPending) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
@@ -58,7 +65,7 @@ export default function App() {
     );
   }
 
-  if (!session?.user) {
+  if (!isAuthenticated) {
     if (showAuth) {
       return <LoginPage onBack={() => setShowAuth(false)} />;
     }
@@ -71,7 +78,21 @@ export default function App() {
     );
   }
 
-  return <AuthenticatedApp user={session.user} />;
+  // Still loading user data
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <span className="text-white text-3xl">📞</span>
+          </div>
+          <p className="text-slate-500">Loading user...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <AuthenticatedApp user={currentUser} />;
 }
 
 // ============================================================================
@@ -556,6 +577,8 @@ function ScheduleCallCard({ onComplete }: { onComplete: () => void }) {
 // ============================================================================
 
 function Header({ user }: { user: AuthUser }) {
+  const handleSignOut = useHandleSignOut();
+
   return (
     <header className="sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">

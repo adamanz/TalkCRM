@@ -1,26 +1,32 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
+  // Convex Auth tables
+  ...authTables,
   // ============================================================================
   // USER MANAGEMENT (Multi-tenant support)
   // ============================================================================
 
   // Users table - each user has their own Salesforce connection
+  // NOTE: Some fields are optional to support Convex Auth user creation
   users: defineTable({
     email: v.string(),
-    name: v.string(),
+    name: v.optional(v.string()), // Optional for Convex Auth compatibility
+    image: v.optional(v.string()), // Profile image from OAuth provider
+    emailVerificationTime: v.optional(v.number()), // From Convex Auth
     // Verified phone numbers that can authenticate via Caller ID
-    verifiedPhones: v.array(v.string()), // E.164 format: ["+14155551234"]
+    verifiedPhones: v.optional(v.array(v.string())), // E.164 format: ["+14155551234"]
     primaryPhone: v.optional(v.string()), // Main phone for SMS notifications
     // Account status
-    status: v.union(v.literal("active"), v.literal("suspended"), v.literal("pending")),
-    createdAt: v.number(),
+    status: v.optional(v.union(v.literal("active"), v.literal("suspended"), v.literal("pending"))),
+    createdAt: v.optional(v.number()),
     lastLoginAt: v.optional(v.number()),
     // Subscription tier (for future use)
     tier: v.optional(v.union(v.literal("free"), v.literal("starter"), v.literal("pro"), v.literal("enterprise"))),
   })
-    .index("by_email", ["email"])
+    .index("email", ["email"]) // Required by Convex Auth
     .index("by_phone", ["verifiedPhones"]), // Look up user by any verified phone
 
   // Phone verification codes (temporary, auto-expire)
@@ -87,6 +93,7 @@ export default defineSchema({
             helpText: v.optional(v.string()),
             picklistValues: v.optional(v.array(v.string())),
             referenceTo: v.optional(v.string()),
+            relationshipName: v.optional(v.string()), // For lookup traversal (e.g., sendblue__Lead__r)
           })
         )
       )),

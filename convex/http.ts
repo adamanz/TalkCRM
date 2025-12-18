@@ -1,7 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import { authComponent, createAuth } from "./auth";
+import { auth } from "./auth";
 
 // Helper to log activity to dashboard
 type ActivityType = "thinking" | "searching" | "found" | "creating" | "updating" | "success" | "error";
@@ -32,9 +32,9 @@ async function logActivity(
 const http = httpRouter();
 
 // ============================================================================
-// BETTER AUTH ROUTES - Register authentication endpoints
+// CONVEX AUTH ROUTES - Register authentication endpoints
 // ============================================================================
-authComponent.registerRoutes(http, createAuth, { cors: true });
+auth.addHttpRoutes(http);
 
 // ============================================================================
 // CORS HELPERS
@@ -1109,14 +1109,15 @@ http.route({
 
       // Return TwiML to connect to ElevenLabs Conversational AI
       // Pass dynamic variables for user context (caller_phone, user_id, user_name)
+      const userName = user.name || "there";
       const dynamicVars = encodeURIComponent(JSON.stringify({
         caller_phone: from,
         user_id: user._id,
-        user_name: user.name,
+        user_name: userName,
       }));
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Welcome back, ${user.name.split(" ")[0]}. Connecting you to your assistant.</Say>
+  <Say voice="alice">Welcome back, ${userName.split(" ")[0]}. Connecting you to your assistant.</Say>
   <Connect>
     <ConversationalAi url="wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}&amp;dynamic_variables=${dynamicVars}" />
   </Connect>
@@ -2116,6 +2117,19 @@ http.route({
       }
 
       console.log("Authenticated texter:", { userId: user._id, name: user.name });
+
+      // DEDUPLICATION: Check if this message was already processed
+      const existingMessage = await ctx.runQuery(internal.textMessages.getByMessageHandle, {
+        messageHandle: messageHandle,
+      });
+
+      if (existingMessage) {
+        console.log("Duplicate webhook - message already processed:", messageHandle);
+        return new Response(JSON.stringify({ status: "already_processed" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
       // Log activity
       await logActivity(ctx, "thinking", `Text from ${user.name}: "${content?.slice(0, 30)}${content?.length > 30 ? '...' : ''}"`, {

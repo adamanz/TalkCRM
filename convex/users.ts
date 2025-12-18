@@ -60,7 +60,7 @@ export const getUserByPhone = query({
       .collect();
 
     // Find user whose verifiedPhones includes this number
-    const user = users.find((u) => u.verifiedPhones.includes(normalizedPhone));
+    const user = users.find((u) => u.verifiedPhones?.includes(normalizedPhone));
 
     return user || null;
   },
@@ -79,7 +79,7 @@ export const getUserByPhoneInternal = internalQuery({
       .withIndex("by_phone")
       .collect();
 
-    const user = users.find((u) => u.verifiedPhones.includes(normalizedPhone));
+    const user = users.find((u) => u.verifiedPhones?.includes(normalizedPhone));
 
     return user || null;
   },
@@ -93,7 +93,7 @@ export const getUserByEmail = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+      .withIndex("email", (q) => q.eq("email", args.email.toLowerCase()))
       .first();
   },
 });
@@ -109,13 +109,36 @@ export const getUser = query({
 });
 
 /**
- * Get current user's profile (called from frontend with stored userId)
+ * Get current user's profile - uses Convex Auth identity
  */
 export const getCurrentUser = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    if (!args.userId) return null;
-    return await ctx.db.get(args.userId);
+  args: {},
+  handler: async (ctx) => {
+    // Get the authenticated user's identity from Convex Auth
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    // Convex Auth subject format is "userId|sessionId"
+    const subject = identity.subject;
+    if (!subject) return null;
+
+    // Parse the subject to extract the user ID (first part)
+    const parts = subject.split("|");
+    if (parts.length !== 2) return null;
+
+    const userId = parts[0];
+
+    // Get user directly by ID
+    const user = await ctx.db.get(userId as Id<"users">);
+    if (!user) return null;
+
+    // Return user data in expected format
+    return {
+      id: user._id,
+      email: user.email,
+      name: user.name || user.email?.split("@")[0] || "User",
+      image: user.image,
+    };
   },
 });
 
@@ -139,7 +162,7 @@ export const createUser = mutation({
     // Check if email already exists
     const existingEmail = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .withIndex("email", (q) => q.eq("email", normalizedEmail))
       .first();
 
     if (existingEmail) {
@@ -149,7 +172,7 @@ export const createUser = mutation({
     // Check if phone already exists
     const users = await ctx.db.query("users").collect();
     const existingPhone = users.find((u) =>
-      u.verifiedPhones.includes(normalizedPhone)
+      u.verifiedPhones?.includes(normalizedPhone)
     );
 
     if (existingPhone) {
@@ -185,7 +208,7 @@ export const addPhoneToUser = mutation({
     // Check if phone already exists on any user
     const users = await ctx.db.query("users").collect();
     const existingPhone = users.find((u) =>
-      u.verifiedPhones.includes(normalizedPhone)
+      u.verifiedPhones?.includes(normalizedPhone)
     );
 
     if (existingPhone) {
@@ -200,7 +223,7 @@ export const addPhoneToUser = mutation({
 
     // Add phone to user's verified phones
     await ctx.db.patch(args.userId, {
-      verifiedPhones: [...user.verifiedPhones, normalizedPhone],
+      verifiedPhones: [...(user.verifiedPhones || []), normalizedPhone],
     });
 
     return { success: true, phone: normalizedPhone };
@@ -224,11 +247,11 @@ export const removePhoneFromUser = mutation({
     }
 
     // Must keep at least one phone
-    if (user.verifiedPhones.length <= 1) {
+    if ((user.verifiedPhones?.length || 0) <= 1) {
       throw new Error("Cannot remove last phone number");
     }
 
-    const newPhones = user.verifiedPhones.filter((p) => p !== normalizedPhone);
+    const newPhones = (user.verifiedPhones || []).filter((p) => p !== normalizedPhone);
 
     // If removing primary phone, set a new one
     let newPrimary = user.primaryPhone;
@@ -285,7 +308,7 @@ export const createUserWithoutPhone = internalMutation({
     // Check if email already exists
     const existingEmail = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .withIndex("email", (q) => q.eq("email", normalizedEmail))
       .first();
 
     if (existingEmail) {
@@ -409,7 +432,7 @@ export const verifyPhoneCode = mutation({
       }
 
       await ctx.db.patch(verification.userId, {
-        verifiedPhones: [...user.verifiedPhones, normalizedPhone],
+        verifiedPhones: [...(user.verifiedPhones || []), normalizedPhone],
         primaryPhone: user.primaryPhone || normalizedPhone,
         status: "active", // Activate user when phone is verified
       });
