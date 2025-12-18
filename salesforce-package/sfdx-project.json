@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.6",
-      "versionNumber": "0.6.0.NEXT",
+      "versionName": "ver 0.11",
+      "versionNumber": "0.11.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "TalkCRM",
-      "versionDescription": "Package version 0.6.0"
+      "versionDescription": "v0.11 - Per-user phone verification with org-level Connected App config"
     }
   ],
   "name": "TalkCRM",
@@ -25,6 +25,12 @@
     "TalkCRM@0.4.0-2": "04tfo000001FZkrAAG",
     "TalkCRM@0.5.0-1": "04tfo000001FZmTAAW",
     "TalkCRM@0.6.0-1": "04tfo000001FZo5AAG",
-    "TalkCRM@0.6.0-2": "04tfo000001FZphAAG"
+    "TalkCRM@0.6.0-2": "04tfo000001FZphAAG",
+    "TalkCRM@0.7.0-1": "04tfo000001FZrJAAW",
+    "TalkCRM@0.8.0-1": "04tfo000001FZw9AAG",
+    "TalkCRM@0.8.0-2": "04tfo000001FZzNAAW",
+    "TalkCRM@0.9.0-1": "04tfo000001FZswAAG",
+    "TalkCRM@0.10.0-1": "04tfo000001Fa0zAAC",
+    "TalkCRM@0.11.0-1": "04tfo000001Fa2bAAC"
   }
 }

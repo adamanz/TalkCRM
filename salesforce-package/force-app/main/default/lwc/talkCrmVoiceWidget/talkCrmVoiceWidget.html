@@ -1,0 +1,22 @@
+<template>
+    <lightning-card title="Voice Assistant" icon-name="utility:voice_over">
+        <div class="slds-p-around_medium">
+            <template lwc:if={showWidget}>
+                <div class="widget-wrapper">
+                    <iframe
+                        src={widgetUrl}
+                        title="TalkCRM Voice Assistant"
+                        class="voice-widget-iframe"
+                        allow="microphone"
+                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                    ></iframe>
+                </div>
+                <div class="slds-text-align_center slds-m-top_small">
+                    <p class="slds-text-body_small slds-text-color_weak">
+                        Click the microphone to start talking to your Salesforce assistant
+                    </p>
+                </div>
+            </template>
+        </div>
+    </lightning-card>
+</template>

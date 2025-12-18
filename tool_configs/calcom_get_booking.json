@@ -1,0 +1,40 @@
+{
+    "type": "api_integration_webhook",
+    "name": "calcom_get_booking",
+    "description": "Get details of a specific booking by its unique identifier",
+    "response_timeout_secs": 20,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "tool_version": "1.0.0",
+    "api_integration_id": "calcom",
+    "api_integration_connection_id": "icxn_6101kcppvzk9fv59xn4chmm3mv5v",
+    "api_schema_overrides": null,
+    "base_api_schema": {
+        "request_headers": {
+            "cal-api-version": "2024-08-13"
+        },
+        "url": "https://api.cal.com/v2/bookings/{bookingUid}",
+        "method": "GET",
+        "path_params_schema": {
+            "booking_uid": {
+                "type": "string",
+                "description": "The unique identifier of the booking, its a 22 character alphanumeric string",
+                "enum": null,
+                "is_system_provided": false,
+                "dynamic_variable": "",
+                "constant_value": ""
+            }
+        },
+        "query_params_schema": null,
+        "request_body_schema": null,
+        "content_type": "application/json",
+        "auth_connection": null
+    }
+}

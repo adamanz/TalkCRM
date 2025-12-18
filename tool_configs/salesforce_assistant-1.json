@@ -1,0 +1,37 @@
+{
+    "type": "webhook",
+    "name": "salesforce_assistant",
+    "description": "Your intelligent Salesforce assistant. Use this tool for ANY request about Salesforce data - searching records, viewing pipeline, creating tasks, updating deals, logging calls, or any CRM question. Just pass the user's natural language request and the assistant will figure out what to do.",
+    "response_timeout_secs": 30,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "api_schema": {
+        "request_headers": {
+            "Content-Type": "application/json"
+        },
+        "url": "https://tough-raccoon-796.convex.site/tools/assistant",
+        "method": "POST",
+        "path_params_schema": {},
+        "request_body_schema": {
+            "type": "object",
+            "required": [
+                "message"
+            ],
+            "description": "Send the user's natural language request to the Salesforce AI assistant",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The user's request in natural language. Examples: 'Show me my pipeline', 'Find the Acme account', 'Update the Acme deal to Closed Won', 'Create a task to call John tomorrow', 'Log this call'."
+                }
+            }
+        },
+        "content_type": "application/json"
+    }
+}

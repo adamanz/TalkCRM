@@ -1,0 +1,119 @@
+{
+    "type": "api_integration_webhook",
+    "name": "calcom_create_booking",
+    "description": "Create a new booking for an event. This schedules an appointment.",
+    "response_timeout_secs": 20,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "tool_version": "1.0.0",
+    "api_integration_id": "calcom",
+    "api_integration_connection_id": "icxn_6101kcppvzk9fv59xn4chmm3mv5v",
+    "api_schema_overrides": null,
+    "base_api_schema": {
+        "request_headers": {
+            "cal-api-version": "2024-08-13"
+        },
+        "url": "https://api.cal.com/v2/bookings",
+        "method": "POST",
+        "path_params_schema": {},
+        "query_params_schema": null,
+        "request_body_schema": {
+            "type": "object",
+            "required": [
+                "eventTypeId",
+                "start",
+                "attendee"
+            ],
+            "description": "Booking details",
+            "properties": {
+                "event_type_id": {
+                    "type": "integer",
+                    "description": "The ID of the event type to book",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "start": {
+                    "type": "string",
+                    "description": "Start time in ISO 8601 format (e.g., '2024-01-15T14:00:00Z'). Do not use offset or extended format.",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "attendee": {
+                    "type": "object",
+                    "required": [
+                        "name",
+                        "timeZone"
+                    ],
+                    "description": "Attendee information",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Full name of the attendee",
+                            "enum": null,
+                            "is_system_provided": false,
+                            "dynamic_variable": "",
+                            "constant_value": ""
+                        },
+                        "email": {
+                            "type": "string",
+                            "description": "Email address of the attendee",
+                            "enum": null,
+                            "is_system_provided": false,
+                            "dynamic_variable": "",
+                            "constant_value": ""
+                        },
+                        "time_zone": {
+                            "type": "string",
+                            "description": "Timezone of the attendee (e.g., 'America/New_York')",
+                            "enum": null,
+                            "is_system_provided": false,
+                            "dynamic_variable": "",
+                            "constant_value": ""
+                        },
+                        "phone_number": {
+                            "type": "string",
+                            "description": " The phone number of the attendee in international format eg +919876543210",
+                            "enum": null,
+                            "is_system_provided": false,
+                            "dynamic_variable": "",
+                            "constant_value": ""
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "Preferred language of the attendee (e.g., 'en')",
+                            "enum": null,
+                            "is_system_provided": false,
+                            "dynamic_variable": "",
+                            "constant_value": ""
+                        }
+                    }
+                },
+                "guests": {
+                    "type": "array",
+                    "description": "An optional list of guest emails attending the event",
+                    "items": {
+                        "type": "string",
+                        "description": "Guest email address",
+                        "enum": null,
+                        "is_system_provided": false,
+                        "dynamic_variable": "",
+                        "constant_value": ""
+                    }
+                }
+            }
+        },
+        "content_type": "application/json",
+        "auth_connection": null
+    }
+}

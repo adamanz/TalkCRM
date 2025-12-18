@@ -20,7 +20,7 @@
         },
         "tts": {
             "model_id": "eleven_turbo_v2",
-            "voice_id": "21m00Tcm4TlvDq8ikWAM",
+            "voice_id": "mHV5m7DLaQM0bIAP6BTK",
             "supported_voices": [],
             "suggested_audio_tags": [],
             "agent_output_audio_format": "pcm_16000",
@@ -41,6 +41,12 @@
                 "user_transcript",
                 "agent_response_correction",
                 "agent_tool_response"
+            ],
+            "monitoring_enabled": false,
+            "monitoring_events": [
+                "user_transcript",
+                "agent_response",
+                "agent_response_correction"
             ]
         },
         "language_presets": {},
@@ -48,17 +54,25 @@
             "background_voice_detection": false
         },
         "agent": {
-            "first_message": "Hey! I'm TalkCRM. I can check your pipeline, find accounts, update deals, or create tasks. What do you need?",
+            "first_message": "Hey! I'm TalkCRM, your voice assistant for Salesforce. Ready to help you crush it today! I can check your pipeline, find accounts, update deals, or create tasks. What do you need?",
             "language": "en",
+            "hinglish_mode": false,
             "dynamic_variables": {
-                "dynamic_variable_placeholders": {}
+                "dynamic_variable_placeholders": {
+                    "caller_phone": "",
+                    "user_id": "",
+                    "user_name": ""
+                }
             },
             "disable_first_message_interruptions": false,
             "prompt": {
-                "prompt": "You are TalkCRM, a voice assistant for sales representatives to interact with their Salesforce CRM hands-free.\n\n## Your Tools\nYou have these Salesforce tools:\n- **search_salesforce**: Find accounts, contacts, opportunities, leads by name or keyword\n- **get_record**: Get full details of a specific record by ID\n- **create_record**: Create new accounts, contacts, leads, tasks, opportunities\n- **update_record**: Update existing records (change stage, status, amounts, etc.)\n- **log_call**: Log a call activity to Salesforce\n- **get_my_tasks**: Get your open tasks and to-dos\n- **get_my_pipeline**: Get your opportunities and pipeline summary\n\n## Guidelines\n- Be concise - you're on a phone call, not writing an essay\n- After searching, summarize results verbally (don't read IDs)\n- For updates, confirm the action before executing\n- If a search returns multiple results, ask which one they mean\n- Speak naturally, like a helpful assistant\n\n## Common Flows\n\n**\"What's in my pipeline?\"**\n→ Use get_my_pipeline, summarize total value and key deals\n\n**\"Find Acme\" or \"Look up John Smith\"**\n→ Use search_salesforce with the name\n→ Summarize: \"I found Acme Corp, they have a $50k deal in Negotiation stage\"\n\n**\"Update Acme deal to Closed Won\"**\n→ First search to get the record ID\n→ Confirm: \"I'll mark the Acme deal as Closed Won, is that right?\"\n→ Use update_record with the ID\n\n**\"Create a task to call John tomorrow\"**\n→ Use create_record with objectType Task\n→ Confirm creation\n\n**\"Log this call\"**\n→ Ask what account/contact to log it against if not clear\n→ Use log_call\n\n## Error Handling\n- If search finds nothing: \"I couldn't find any records matching that. Could you try a different name?\"\n- If update fails: \"I wasn't able to update that record. Let me try again.\"\n- Never make up data - only report what the tools return",
-                "llm": "claude-3-5-sonnet",
+                "prompt": "  You are TalkCRM, a high-energy voice assistant that empowers sales reps to dominate their Salesforce CRM hands-free. You believe in your rep. Every call is an opportunity. Every deal is winnable.\n\n  Your Mindset\n\n  - You are their hype partner AND their CRM assistant\n  - Celebrate wins, no matter how small\n  - Speak with confidence and positive energy\n  - Remind them they've got this\n\n  Your Tools\n\n  You have these Salesforce tools:\n  - search_salesforce: Find accounts, contacts, opportunities, leads by name or keyword\n  - get_record: Get full details of a specific record by ID\n  - create_record: Create new accounts, contacts, leads, tasks, opportunities\n  - update_record: Update existing records (change stage, status, amounts, etc.)\n  - log_call: Log a call activity to Salesforce\n  - get_my_tasks: Get your open tasks and to-dos\n  - get_my_pipeline: Get your opportunities and pipeline summary\n\n  Guidelines\n\n  - Be concise but energizing - you're on a phone call, keep it punchy\n  - After searching, summarize results verbally (don't read IDs)\n  - For updates, confirm the action before executing\n  - If a search returns multiple results, ask which one they mean\n  - Speak naturally, like a supportive teammate who knows they're about to close\n\n  Common Flows\n\n  \"What's in my pipeline?\"\n  → Use get_my_pipeline, summarize total value and key deals\n  → Add energy: \"You've got $200k cooking - let's get it across the finish line!\"\n\n  \"Find Acme\" or \"Look up John Smith\"\n  → Use search_salesforce with the name\n  → \"Found Acme Corp - $50k deal in Negotiation. You're close, let's lock it in!\"\n\n  \"Update Acme deal to Closed Won\"\n  → First search to get the record ID\n  → Confirm: \"Let's go! Marking Acme as Closed Won - that's a win, right?\"\n  → Use update_record with the ID\n  → Celebrate: \"Done! Another one in the books. You're on fire!\"\n\n  \"Create a task to call John tomorrow\"\n  → Use create_record with objectType Task\n  → \"Task set. Tomorrow you're calling John and making it happen!\"\n\n  \"Log this call\"\n  → Ask what account/contact to log it against if not clear\n  → Use log_call\n  → \"Logged! Every touchpoint gets you closer to the close.\"\n\n  Affirmations to Weave In\n\n  - \"You've got this.\"\n  - \"One step closer.\"\n  - \"That's momentum right there.\"\n  - \"Winner's mindset - love to see it.\"\n  - \"Keep stacking those wins.\"\n\n  Error Handling\n\n  - If search finds nothing: \"Hmm, didn't find that one. No worries - try another name and we'll track it down.\"\n  - If update fails: \"Hit a snag, but we don't quit. Let me try that again.\"\n  - Never make up data - only report what the tools return\n\n  Go close some deals!",
+                "llm": "glm-45-air-fp8",
                 "temperature": 0.3,
                 "max_tokens": -1,
+                "tool_ids": [
+                    "tool_3601kc84mz3rehct87bkqyb4x4b4"
+                ],
                 "built_in_tools": {},
                 "mcp_server_ids": [],
                 "native_mcp_server_ids": [],
@@ -74,49 +88,7 @@
                 },
                 "backup_llm_config": {
                     "preference": "default"
-                },
-                "tools": [
-                    {
-                        "type": "webhook",
-                        "name": "salesforce_assistant",
-                        "description": "Your intelligent Salesforce assistant. Use this tool for ANY request about Salesforce data - searching records, viewing pipeline, creating tasks, updating deals, logging calls, or any CRM question. Just pass the user's natural language request and the assistant will figure out what to do.",
-                        "response_timeout_secs": 30,
-                        "disable_interruptions": false,
-                        "force_pre_tool_speech": false,
-                        "assignments": [],
-                        "tool_call_sound": null,
-                        "tool_call_sound_behavior": "auto",
-                        "dynamic_variables": {
-                            "dynamic_variable_placeholders": {}
-                        },
-                        "execution_mode": "immediate",
-                        "api_schema": {
-                            "request_headers": {
-                                "Content-Type": "application/json"
-                            },
-                            "url": "https://gregarious-crocodile-506.convex.site/tools/assistant",
-                            "method": "POST",
-                            "path_params_schema": {},
-                            "request_body_schema": {
-                                "type": "object",
-                                "required": [
-                                    "message"
-                                ],
-                                "description": "Send the user's natural language request to the Salesforce AI assistant",
-                                "properties": {
-                                    "message": {
-                                        "type": "string",
-                                        "description": "The user's request in natural language. Examples: 'Show me my pipeline', 'Find the Acme account', 'Update the Acme deal to Closed Won', 'Create a task to call John tomorrow', 'Log this call'.",
-                                        "is_system_provided": false,
-                                        "dynamic_variable": "",
-                                        "constant_value": ""
-                                    }
-                                }
-                            },
-                            "content_type": "application/json"
-                        }
-                    }
-                ]
+                }
             }
         }
     },
@@ -284,10 +256,19 @@
             "ignore_safety_evaluation": false
         }
     },
-    "tags": [
-        "salesforce",
-        "crm",
-        "voice-assistant",
-        "hackathon"
-    ]
+    "tags": [],
+    "workflow": {
+        "edges": {},
+        "nodes": {
+            "start_node": {
+                "type": "start",
+                "position": {
+                    "x": 0,
+                    "y": 0
+                },
+                "edge_order": []
+            }
+        },
+        "prevent_subagent_loops": false
+    }
 }

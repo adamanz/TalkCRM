@@ -8,11 +8,12 @@
     "dev:frontend": "vite --open",
     "dev:backend": "convex dev",
     "predev": "convex dev --until-success && convex dashboard",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit && vite build",
     "lint": "tsc && eslint .  --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "convex": "^1.29.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"

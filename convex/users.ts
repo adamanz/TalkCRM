@@ -258,6 +258,19 @@ export const updateLastLogin = internalMutation({
 });
 
 /**
+ * Activate a user account (internal use)
+ */
+export const activateUser = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      status: "active",
+    });
+    return { success: true };
+  },
+});
+
+/**
  * Create a new user without phone (used during OAuth flow)
  * Phone will be added in step 2 of setup
  */
@@ -397,6 +410,8 @@ export const verifyPhoneCode = mutation({
 
       await ctx.db.patch(verification.userId, {
         verifiedPhones: [...user.verifiedPhones, normalizedPhone],
+        primaryPhone: user.primaryPhone || normalizedPhone,
+        status: "active", // Activate user when phone is verified
       });
       userId = verification.userId;
     } else if (verification.email && verification.name) {
@@ -484,5 +499,33 @@ export const getUserStats = query({
       totalRecordsAccessed,
       totalRecordsModified,
     };
+  },
+});
+
+/**
+ * Activate user (temporary admin function)
+ */
+export const activateUserPublic = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, { status: "active" });
+    return { success: true };
+  },
+});
+
+/**
+ * List all users (admin debug function)
+ */
+export const listAllUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return users.map((u) => ({
+      id: u._id,
+      email: u.email,
+      name: u.name,
+      phones: u.verifiedPhones,
+      status: u.status,
+    }));
   },
 });

@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
+import Anthropic from "@anthropic-ai/sdk";
 
 // ============================================================================
 // ANAM SESSION MANAGEMENT
@@ -16,7 +18,12 @@ export const createSession = action({
     personaType: v.optional(v.string()), // "skeptical_cfo", "technical_evaluator", "friendly_champion"
     userId: v.optional(v.id("users")),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    sessionToken: string;
+    coachingSessionId: Id<"coachingSessions">;
+    persona: { name: string; type: string; description: string };
+    dealContext: { opportunityName: string; amount: number | null; stage: string; accountName: string | null };
+  }> => {
     const anamApiKey = process.env.ANAM_API_KEY;
     if (!anamApiKey) {
       throw new Error("ANAM_API_KEY not configured");
@@ -116,11 +123,6 @@ export const handleChatMessage = action({
     })),
   },
   handler: async (ctx, args) => {
-    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicApiKey) {
-      throw new Error("ANTHROPIC_API_KEY not configured");
-    }
-
     // Get the coaching session for context
     const session = await ctx.runQuery(internal.dealCoach.getCoachingSession, {
       sessionId: args.coachingSessionId,
@@ -133,33 +135,21 @@ export const handleChatMessage = action({
     // Build the system prompt with deal context
     const systemPrompt = buildCoachingSystemPrompt(session);
 
-    // Call Claude for the response
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": anthropicApiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 300, // Keep responses concise for voice
-        system: systemPrompt,
-        messages: args.messages.map(m => ({
-          role: m.role === "user" ? "user" : "assistant",
-          content: m.content,
-        })),
-      }),
+    // Call Claude for the response using SDK
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: "claude-opus-4-5-20251101",
+      max_tokens: 300, // Keep responses concise for voice
+      system: systemPrompt,
+      messages: args.messages.map(m => ({
+        role: m.role === "user" ? "user" as const : "assistant" as const,
+        content: m.content,
+      })),
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("Claude API error:", error);
-      throw new Error(`Claude API error: ${error}`);
-    }
-
-    const data = await response.json();
-    const assistantMessage = data.content[0]?.text || "I'm sorry, I didn't catch that. Could you repeat?";
+    const assistantMessage = response.content[0].type === "text"
+      ? response.content[0].text
+      : "I'm sorry, I didn't catch that. Could you repeat?";
 
     // Log the interaction
     await ctx.runMutation(internal.dealCoach.logCoachingInteraction, {
@@ -188,11 +178,6 @@ export const streamChatResponse = internalAction({
     })),
   },
   handler: async (ctx, args) => {
-    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicApiKey) {
-      throw new Error("ANTHROPIC_API_KEY not configured");
-    }
-
     // Get session context
     const session = await ctx.runQuery(internal.dealCoach.getCoachingSession, {
       sessionId: args.coachingSessionId,
@@ -208,32 +193,20 @@ export const streamChatResponse = internalAction({
       { role: "user", content: args.userMessage },
     ];
 
-    // Use streaming for faster response
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": anthropicApiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
-        stream: true,
-        system: systemPrompt,
-        messages: messages.map(m => ({
-          role: m.role === "user" ? "user" : "assistant",
-          content: m.content,
-        })),
-      }),
+    // Use SDK streaming for faster response
+    const client = new Anthropic();
+    const stream = client.messages.stream({
+      model: "claude-opus-4-5-20251101",
+      max_tokens: 300,
+      system: systemPrompt,
+      messages: messages.map(m => ({
+        role: m.role === "user" ? "user" as const : "assistant" as const,
+        content: m.content,
+      })),
     });
 
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${await response.text()}`);
-    }
-
     // Return the stream - caller will handle chunked reading
-    return response;
+    return stream;
   },
 });
 

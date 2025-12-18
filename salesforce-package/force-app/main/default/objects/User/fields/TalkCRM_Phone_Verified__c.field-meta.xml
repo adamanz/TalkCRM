@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>TalkCRM_Phone_Verified__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Indicates whether this user has verified their phone number with TalkCRM.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Set to true when the user completes phone verification.</inlineHelpText>
+    <label>TalkCRM Phone Verified</label>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Checkbox</type>
+</CustomField>

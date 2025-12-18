@@ -91,10 +91,41 @@ http.route({
         conversationId: body.conversation_id,
       });
 
+      // Look up userId from conversation_id (for per-user Salesforce auth)
+      // ElevenLabs passes its own conversation_id which we map to userId via the webhook
+      let userId: string | undefined;
+
+      // First try ElevenLabs conversation_id (mapped via conversation-start webhook)
+      if (body.conversation_id) {
+        const conversation = await ctx.runQuery(api.conversations.getConversationByElevenlabsId, {
+          elevenlabsConversationId: body.conversation_id,
+        });
+        if (conversation?.userId) {
+          userId = conversation.userId;
+          console.log(`Found userId ${userId} from ElevenLabs conversation ${body.conversation_id}`);
+        }
+      }
+
+      // Fall back to caller_phone if passed
+      if (!userId && body.caller_phone) {
+        const user = await ctx.runQuery(api.users.getUserByPhone, {
+          phone: body.caller_phone,
+        });
+        if (user) {
+          userId = user._id;
+        }
+      }
+
+      // Fall back to user_id if passed directly
+      if (!userId && body.user_id) {
+        userId = body.user_id;
+      }
+
       // Call the AI-powered action
       const result = await ctx.runAction(api.ai.askSalesforce, {
         userMessage,
         conversationHistory: body.conversation_history,
+        userId: userId as any, // Pass userId for per-user Salesforce auth
       });
 
       // Log success with action details
@@ -175,6 +206,7 @@ http.route({
         query: query || "",
         objectType: object_type,
         limit: limit || 10,
+        conversationId: body.conversation_id,
       }) as { records: any[]; totalSize: number };
 
       // Log found activity with record details
@@ -245,6 +277,7 @@ http.route({
         recordId: record_id,
         objectType: object_type,
         fields: fields,
+        conversationId: body.conversation_id,
       });
 
       if (body.conversation_id) {
@@ -300,6 +333,7 @@ http.route({
       const result = await ctx.runAction(api.salesforce.createRecord, {
         objectType: object_type,
         fields: fields,
+        conversationId: body.conversation_id,
       }) as { id: string; success: boolean };
 
       // Log success
@@ -370,6 +404,7 @@ http.route({
         recordId: record_id,
         objectType: object_type,
         fields: fields,
+        conversationId: body.conversation_id,
       });
 
       // Log success
@@ -427,6 +462,7 @@ http.route({
         subject: body.subject || "Voice Call",
         description: body.description || body.notes,
         durationMinutes: body.duration_minutes,
+        conversationId: body.conversation_id,
       });
 
       if (body.conversation_id) {
@@ -477,6 +513,7 @@ http.route({
       const result = await ctx.runAction(api.salesforce.getMyTasks, {
         status: body.status,
         dueDate: body.due_date,
+        conversationId: body.conversation_id,
       }) as { tasks: any[]; count: number };
 
       // Log found
@@ -537,6 +574,7 @@ http.route({
       const result = await ctx.runAction(api.salesforce.getMyOpportunities, {
         stage: body.stage,
         closeDate: body.close_date,
+        conversationId: body.conversation_id,
       }) as { opportunities: any[]; summary: string; totalAmount?: number };
 
       // Log found with pipeline value
@@ -576,12 +614,132 @@ http.route({
   }),
 });
 
+/**
+ * Get my accounts
+ * Tool name in ElevenLabs: get_my_accounts
+ */
+http.route({
+  path: "/tools/my-accounts",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const startTime = Date.now();
+    try {
+      const body = await request.json();
+      console.log("get_my_accounts called with:", body);
+
+      // Log searching activity
+      await logActivity(ctx, "searching", "Retrieving your accounts...", {
+        toolName: "get_my_accounts",
+        recordType: "Account",
+        conversationId: body.conversation_id,
+      });
+
+      const result = await ctx.runAction(api.salesforce.getMyAccounts, {
+        industry: body.industry,
+        limit: body.limit,
+        conversationId: body.conversation_id,
+      }) as { accounts: any[]; count: number; userId: string; userName: string };
+
+      // Log found
+      await logActivity(ctx, "found", `Found ${result.count} account${result.count !== 1 ? 's' : ''}`, {
+        toolName: "get_my_accounts",
+        recordType: "Account",
+        conversationId: body.conversation_id,
+      });
+
+      if (body.conversation_id) {
+        await ctx.runMutation(internal.conversations.logToolCall, {
+          conversationId: body.conversation_id,
+          toolName: "get_my_accounts",
+          input: JSON.stringify(body),
+          output: JSON.stringify(result),
+          success: true,
+          durationMs: Date.now() - startTime,
+        });
+      }
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("get_my_accounts error:", error);
+      await logActivity(ctx, "error", `Failed to get accounts: ${error.message}`, {
+        toolName: "get_my_accounts",
+      });
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
 // ============================================================================
 // ELEVENLABS WEBHOOKS
 // ============================================================================
 
 /**
+ * Conversation initiation webhook - called when a conversation starts
+ * This allows us to capture the ElevenLabs conversation_id and map it to the userId
+ * passed via dynamic_variables from Twilio
+ */
+http.route({
+  path: "/webhooks/elevenlabs/conversation-start",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      console.log("ElevenLabs conversation-start webhook:", JSON.stringify(body, null, 2));
+
+      // ElevenLabs sends conversation_id and dynamic_variables
+      const conversationId = body?.conversation_id;
+      const dynamicVars = body?.dynamic_variables || body?.conversation_initiation_client_data?.dynamic_variables;
+
+      if (conversationId && dynamicVars) {
+        const callerPhone = dynamicVars.caller_phone;
+        const userId = dynamicVars.user_id;
+        const userName = dynamicVars.user_name;
+
+        console.log("Mapping ElevenLabs conversation:", {
+          conversationId,
+          callerPhone,
+          userId,
+          userName,
+        });
+
+        // Store the mapping - update the conversation with ElevenLabs ID
+        if (userId) {
+          await ctx.runMutation(internal.conversations.updateElevenlabsConversationId, {
+            elevenlabsConversationId: conversationId,
+            userId,
+            callerPhone,
+          });
+        }
+      }
+
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("ElevenLabs conversation-start error:", error);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+/**
  * Post-call webhook - called when a conversation ends
+ * Captures all ElevenLabs analytics data including:
+ * - Transcript and summary
+ * - Call metadata (duration, cost, phone numbers)
+ * - Success evaluation results
+ * - Data collection (extracted structured data)
+ * - Dynamic variables that were passed
  */
 http.route({
   path: "/webhooks/elevenlabs/post-call",
@@ -589,13 +747,14 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     try {
       const body = await request.json();
-      console.log("ElevenLabs post-call webhook:", body);
+      console.log("ElevenLabs post-call webhook:", JSON.stringify(body, null, 2));
 
       // Validate webhook signature (optional but recommended)
       // const signature = request.headers.get("elevenlabs-signature");
 
       // ElevenLabs sends: { type, event_timestamp, data }
-      const data = body?.data ?? body?.data?.data ?? body?.data;
+      // Some webhook variants nest the payload at `data.data`; prefer that if present.
+      const data = body?.data?.data ?? body?.data;
       const conversationId: string | undefined = data?.conversation_id;
       if (!conversationId) {
         return new Response(JSON.stringify({ error: "Missing data.conversation_id" }), {
@@ -604,15 +763,22 @@ http.route({
         });
       }
 
-      // Store transcript as a string in Convex for easy display + debugging.
+      // ============================================================================
+      // TRANSCRIPT
+      // ============================================================================
       const transcriptRaw = data?.transcript;
       const transcript =
         typeof transcriptRaw === "string" ? transcriptRaw : JSON.stringify(transcriptRaw ?? null);
 
-      const summary: string | undefined = data?.analysis?.transcript_summary;
+      // Count turns in transcript
+      const turnCount = Array.isArray(transcriptRaw) ? transcriptRaw.length : undefined;
 
-      const startTimeUnixSecs: number | undefined = data?.metadata?.start_time_unix_secs;
-      const callDurationSecs: number | undefined = data?.metadata?.call_duration_secs;
+      // ============================================================================
+      // METADATA
+      // ============================================================================
+      const metadata = data?.metadata || {};
+      const startTimeUnixSecs: number | undefined = metadata?.start_time_unix_secs;
+      const callDurationSecs: number | undefined = metadata?.call_duration_secs;
       const startTime =
         typeof startTimeUnixSecs === "number" ? startTimeUnixSecs * 1000 : undefined;
       const endTime =
@@ -620,7 +786,60 @@ http.route({
           ? (startTimeUnixSecs + callDurationSecs) * 1000
           : Date.now();
 
-      // Complete the conversation and get user info for recording
+      // Cost in cents (ElevenLabs may send as dollars or cents)
+      const costRaw = metadata?.cost ?? metadata?.total_cost;
+      const costCents = typeof costRaw === "number"
+        ? (costRaw < 1 ? Math.round(costRaw * 100) : Math.round(costRaw))
+        : undefined;
+
+      // Phone numbers
+      const callerPhone = metadata?.caller_id || metadata?.from_number;
+      const calledNumber = metadata?.called_number || metadata?.to_number;
+
+      // ============================================================================
+      // ANALYSIS
+      // ============================================================================
+      const analysis = data?.analysis || {};
+      const summary: string | undefined = analysis?.transcript_summary;
+
+      // Success Evaluation
+      let successEvaluation: { success: boolean; criteriaResults?: any[] } | undefined;
+      if (analysis?.evaluation_criteria_results || analysis?.success_evaluation !== undefined) {
+        const evalResults = analysis?.evaluation_criteria_results;
+        const isSuccess = analysis?.success_evaluation ??
+          (evalResults ? evalResults.every((r: any) => r.result === "success") : undefined);
+
+        successEvaluation = {
+          success: Boolean(isSuccess),
+          criteriaResults: evalResults?.map((r: any) => ({
+            criterionId: r.criterion_id || r.id || "",
+            name: r.name || r.criterion || "",
+            result: r.result || "unknown",
+            rationale: r.rationale || r.reason,
+          })),
+        };
+      }
+
+      // Data Collection - extracted structured data
+      const dataCollection = analysis?.data_collection || analysis?.collected_data;
+
+      // Sentiment (if available)
+      const sentiment = analysis?.sentiment || analysis?.user_sentiment;
+
+      // ============================================================================
+      // DYNAMIC VARIABLES (what was passed to ElevenLabs)
+      // ============================================================================
+      const dynamicVariables = data?.conversation_initiation_client_data?.dynamic_variables ||
+        data?.dynamic_variables;
+
+      // ============================================================================
+      // AGENT INFO
+      // ============================================================================
+      const elevenlabsAgentId = data?.agent_id;
+
+      // ============================================================================
+      // COMPLETE THE CONVERSATION
+      // ============================================================================
       const result = await ctx.runMutation(internal.conversations.completeConversation, {
         conversationId,
         transcript,
@@ -628,6 +847,25 @@ http.route({
         startTime,
         endTime,
         durationSeconds: callDurationSecs,
+        callerPhone,
+        // New analytics fields
+        elevenlabsAgentId,
+        calledNumber,
+        costCents,
+        successEvaluation,
+        dataCollection,
+        dynamicVariables,
+        sentiment,
+        turnCount,
+      });
+
+      console.log("Conversation completed with analytics:", {
+        conversationId,
+        costCents,
+        turnCount,
+        hasSuccessEvaluation: !!successEvaluation,
+        hasDataCollection: !!dataCollection,
+        hasDynamicVariables: !!dynamicVariables,
       });
 
       // Check for recording URL in ElevenLabs data and fetch it
@@ -644,7 +882,7 @@ http.route({
         });
       }
 
-      return new Response(JSON.stringify({ status: "received" }), {
+      return new Response(JSON.stringify({ status: "received", conversationId }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -787,12 +1025,17 @@ http.route({
       const agentId = process.env.ELEVENLABS_AGENT_ID;
 
       // Return TwiML to connect to ElevenLabs Conversational AI
-      // Include user context in the connection (ElevenLabs can use this)
+      // Pass dynamic variables for user context (caller_phone, user_id, user_name)
+      const dynamicVars = encodeURIComponent(JSON.stringify({
+        caller_phone: from,
+        user_id: user._id,
+        user_name: user.name,
+      }));
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Welcome back, ${user.name.split(" ")[0]}. Connecting you to your assistant.</Say>
   <Connect>
-    <ConversationalAi url="wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}" />
+    <ConversationalAi url="wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}&amp;dynamic_variables=${dynamicVars}" />
   </Connect>
 </Response>`;
 
@@ -826,6 +1069,17 @@ http.route({
  */
 http.route({
   path: "/api/auth/signup/start",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
+ * Start signup - sends verification code to phone
+ * POST /api/auth/signup/start
+ * Body: { email, name, phone }
+ */
+http.route({
+  path: "/api/auth/signup/start",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
@@ -833,19 +1087,13 @@ http.route({
       const { email, name, phone } = body;
 
       if (!email || !name || !phone) {
-        return new Response(
-          JSON.stringify({ error: "Email, name, and phone are required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "Email, name, and phone are required" }, 400);
       }
 
       // Check if email already exists
       const existingUser = await ctx.runQuery(api.users.getUserByEmail, { email });
       if (existingUser) {
-        return new Response(
-          JSON.stringify({ error: "An account with this email already exists" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "An account with this email already exists" }, 400);
       }
 
       // Start verification (creates code + sends SMS via SendBlue)
@@ -855,16 +1103,10 @@ http.route({
         name,
       });
 
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return corsResponse(result);
     } catch (error: any) {
       console.error("Signup start error:", error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      return corsResponse({ error: error.message }, 500);
     }
   }),
 });
@@ -915,6 +1157,17 @@ http.route({
  */
 http.route({
   path: "/api/auth/login/start",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
+ * Login with phone - sends verification code
+ * POST /api/auth/login/start
+ * Body: { phone }
+ */
+http.route({
+  path: "/api/auth/login/start",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     try {
@@ -922,19 +1175,13 @@ http.route({
       const { phone } = body;
 
       if (!phone) {
-        return new Response(
-          JSON.stringify({ error: "Phone is required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "Phone is required" }, 400);
       }
 
       // Check if user exists with this phone
       const existingUser = await ctx.runQuery(api.users.getUserByPhone, { phone });
       if (!existingUser) {
-        return new Response(
-          JSON.stringify({ error: "No account found with this phone number. Please sign up first." }),
-          { status: 404, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "No account found with this phone number. Please sign up first." }, 404);
       }
 
       // Start verification for existing user via SendBlue
@@ -942,20 +1189,14 @@ http.route({
         phone,
       });
 
-      return new Response(JSON.stringify({
+      return corsResponse({
         ...result,
         userId: existingUser._id,
         name: existingUser.name,
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
       });
     } catch (error: any) {
       console.error("Login start error:", error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      return corsResponse({ error: error.message }, 500);
     }
   }),
 });
@@ -1025,10 +1266,7 @@ http.route({
       const userId = url.searchParams.get("userId");
 
       if (!userId) {
-        return new Response(
-          JSON.stringify({ error: "userId query parameter required" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "userId query parameter required" }, 400);
       }
 
       const user = await ctx.runQuery(api.users.getUser, {
@@ -1036,21 +1274,130 @@ http.route({
       });
 
       if (!user) {
-        return new Response(
-          JSON.stringify({ error: "User not found" }),
-          { status: 404, headers: { "Content-Type": "application/json" } }
-        );
+        return corsResponse({ error: "User not found" }, 404);
       }
 
-      return new Response(JSON.stringify(user), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return corsResponse(user, 200);
     } catch (error: any) {
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+http.route({
+  path: "/api/user",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+// ============================================================================
+// ANALYTICS ENDPOINTS
+// ============================================================================
+
+/**
+ * Get conversation stats
+ * GET /api/analytics/stats?userId=xxx (optional)
+ */
+http.route({
+  path: "/api/analytics/stats",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get("userId");
+
+      const stats = await ctx.runQuery(api.conversations.getConversationStats, {
+        userId: userId ? (userId as any) : undefined,
+      });
+
+      return corsResponse(stats);
+    } catch (error: any) {
+      console.error("Analytics stats error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Get detailed analytics for a time period
+ * GET /api/analytics/detailed?userId=xxx&days=30 (both optional)
+ */
+http.route({
+  path: "/api/analytics/detailed",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get("userId");
+      const days = url.searchParams.get("days");
+
+      const analytics = await ctx.runQuery(api.conversations.getConversationAnalytics, {
+        userId: userId ? (userId as any) : undefined,
+        days: days ? parseInt(days, 10) : undefined,
+      });
+
+      return corsResponse(analytics);
+    } catch (error: any) {
+      console.error("Analytics detailed error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Get list of conversations with analytics
+ * GET /api/conversations?userId=xxx&limit=50 (both optional)
+ */
+http.route({
+  path: "/api/conversations",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get("userId");
+      const limit = url.searchParams.get("limit");
+
+      const conversations = await ctx.runQuery(api.conversations.listConversations, {
+        userId: userId ? (userId as any) : undefined,
+        limit: limit ? parseInt(limit, 10) : undefined,
+      });
+
+      return corsResponse(conversations);
+    } catch (error: any) {
+      console.error("List conversations error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Get single conversation with full details
+ * GET /api/conversations/:conversationId
+ */
+http.route({
+  path: "/api/conversation",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const conversationId = url.searchParams.get("id");
+
+      if (!conversationId) {
+        return corsResponse({ error: "id query parameter required" }, 400);
+      }
+
+      const conversation = await ctx.runQuery(api.conversations.getConversation, {
+        conversationId,
+      });
+
+      if (!conversation) {
+        return corsResponse({ error: "Conversation not found" }, 404);
+      }
+
+      return corsResponse(conversation);
+    } catch (error: any) {
+      console.error("Get conversation error:", error);
+      return corsResponse({ error: error.message }, 500);
     }
   }),
 });
@@ -1118,6 +1465,86 @@ http.route({
       });
     } catch (error: any) {
       console.error("Org register error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Sync org metadata (custom objects, etc.)
+ * POST /api/org/sync-metadata
+ * Body: { userId } - sync metadata for this user's org
+ */
+http.route({
+  path: "/api/org/sync-metadata",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+http.route({
+  path: "/api/org/sync-metadata",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { userId } = body;
+
+      if (!userId) {
+        return corsResponse({ error: "userId is required" }, 400);
+      }
+
+      // Get user's Salesforce auth
+      const auth = await ctx.runQuery(internal.salesforce.getAuthForUser, {
+        userId: userId as any,
+      });
+
+      if (!auth) {
+        return corsResponse({ error: "User has no Salesforce connection" }, 400);
+      }
+
+      // Sync metadata
+      const result = await ctx.runAction(internal.orgMetadata.syncFromSalesforce, {
+        accessToken: auth.accessToken,
+        instanceUrl: auth.instanceUrl,
+      });
+
+      return corsResponse(result);
+    } catch (error: any) {
+      console.error("Sync metadata error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Get org metadata (available objects for AI context)
+ * GET /api/org/metadata?userId=xxx
+ */
+http.route({
+  path: "/api/org/metadata",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+http.route({
+  path: "/api/org/metadata",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const userId = url.searchParams.get("userId");
+
+      if (!userId) {
+        return corsResponse({ error: "userId query param is required" }, 400);
+      }
+
+      const metadata = await ctx.runQuery(internal.orgMetadata.getAvailableObjects, {
+        userId: userId as any,
+      });
+
+      return corsResponse(metadata);
+    } catch (error: any) {
+      console.error("Get metadata error:", error);
       return corsResponse({ error: error.message }, 500);
     }
   }),
@@ -1204,16 +1631,20 @@ http.route({
       if (!orgCreds) {
         // Return helpful error for unconfigured org
         return new Response(
-          `<html>
-            <head><title>TalkCRM - Setup Required</title></head>
-            <body style="font-family: sans-serif; padding: 40px; text-align: center;">
-              <h1>Connected App Not Configured</h1>
-              <p>No credentials found for: <strong>${normalizedUrl}</strong></p>
-              <p>Please complete Step 1 in the TalkCRM Setup wizard to configure your Connected App credentials.</p>
-              <a href="${callbackUrl}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #0176d3; color: white; text-decoration: none; border-radius: 4px;">Back to Setup</a>
-            </body>
-          </html>`,
-          { status: 400, headers: { "Content-Type": "text/html" } }
+          `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>TalkCRM - Setup Required</title>
+</head>
+<body style="font-family: sans-serif; padding: 40px; text-align: center;">
+  <h1>Connected App Not Configured</h1>
+  <p>No credentials found for: <strong>${normalizedUrl}</strong></p>
+  <p>Please complete Step 1 in the TalkCRM Setup wizard to configure your Connected App credentials.</p>
+  <a href="${callbackUrl}" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #0176d3; color: white; text-decoration: none; border-radius: 4px;">Back to Setup</a>
+</body>
+</html>`,
+          { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } }
         );
       }
 
@@ -1380,6 +1811,17 @@ http.route({
         salesforceUserId: userInfo.user_id,
       });
 
+      // Sync org metadata (custom objects, etc.) for AI context
+      // Run async - don't block the OAuth callback
+      ctx.runAction(internal.orgMetadata.syncFromSalesforce, {
+        accessToken: tokens.access_token,
+        instanceUrl: tokens.instance_url,
+      }).then((result) => {
+        console.log("Org metadata sync result:", result);
+      }).catch((error) => {
+        console.error("Org metadata sync failed:", error);
+      });
+
       // Handle different OAuth sources (stateData already parsed above)
       if (stateData.source === "web") {
         // Web app flow - redirect back to web app
@@ -1400,6 +1842,7 @@ http.route({
       const html = `<!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>TalkCRM - Connected!</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
@@ -1431,12 +1874,745 @@ http.route({
 
       return new Response(html, {
         status: 200,
-        headers: { "Content-Type": "text/html" },
+        headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     } catch (error: any) {
       console.error("OAuth callback error:", error);
       return new Response(`Error: ${error.message}`, { status: 500 });
     }
+  }),
+});
+
+// ============================================================================
+// SENDBLUE WEBHOOKS (AI-powered text messaging)
+// ============================================================================
+
+/**
+ * Verify SendBlue webhook signature using HMAC-SHA256
+ */
+async function verifySendBlueSignature(request: Request, bodyText: string): Promise<boolean> {
+  const secret = process.env.SENDBLUE_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn("SENDBLUE_WEBHOOK_SECRET not configured - skipping verification");
+    return true; // Allow in dev mode
+  }
+
+  const signature = request.headers.get("x-sendblue-signature") ||
+                    request.headers.get("sendblue-signature") ||
+                    request.headers.get("X-Sendblue-Signature");
+
+  if (!signature) {
+    // SendBlue doesn't always send signature headers - allow but warn
+    console.warn("No SendBlue signature header found - allowing request");
+    return true;
+  }
+
+  // SendBlue uses HMAC-SHA256
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signatureBytes = await crypto.subtle.sign("HMAC", key, encoder.encode(bodyText));
+  const expectedSignature = Array.from(new Uint8Array(signatureBytes))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const isValid = signature === expectedSignature;
+  if (!isValid) {
+    console.log("Signature mismatch:", { received: signature, expected: expectedSignature });
+  }
+  return isValid;
+}
+
+/**
+ * SendBlue incoming message webhook
+ * Called when a user texts the TalkCRM number
+ * Identifies user, processes with AI, and sends response
+ */
+http.route({
+  path: "/webhooks/sendblue/incoming",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      // Read body as text first for signature verification
+      const bodyText = await request.text();
+
+      // Verify webhook signature
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        console.error("Invalid SendBlue webhook signature");
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue incoming message:", body);
+
+      // SendBlue webhook payload:
+      // {
+      //   accountEmail, content, is_outbound, status, error_code, error_message,
+      //   message_handle, date_sent, date_updated, from_number, number, to_number,
+      //   was_downgraded, plan, media_url, message_type, group_id, participants,
+      //   send_style, opted_out, sendblue_number, service
+      // }
+
+      const fromNumber = body.from_number || body.number;
+      const toNumber = body.to_number || body.sendblue_number;
+      const content = body.content;
+      const messageHandle = body.message_handle;
+      const mediaUrl = body.media_url;
+      const isOutbound = body.is_outbound;
+
+      // Ignore outbound messages (our own sends)
+      if (isOutbound) {
+        console.log("Ignoring outbound message");
+        return new Response(JSON.stringify({ status: "ignored", reason: "outbound" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Ignore empty messages
+      if (!content && !mediaUrl) {
+        console.log("Ignoring empty message");
+        return new Response(JSON.stringify({ status: "ignored", reason: "empty" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if user opted out
+      if (body.opted_out) {
+        console.log("User has opted out:", fromNumber);
+        return new Response(JSON.stringify({ status: "ignored", reason: "opted_out" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Identify user by phone number
+      const user = await ctx.runQuery(internal.users.getUserByPhoneInternal, {
+        phone: fromNumber,
+      });
+
+      if (!user) {
+        console.log("Unregistered texter:", fromNumber);
+
+        // Send registration instructions
+        await ctx.runAction(api.sendblue.sendMessage, {
+          to: fromNumber,
+          content: "Welcome! To use TalkCRM via text, please sign up at talkcrm.com and verify this phone number. Once registered, you can text me to manage your Salesforce data.",
+          fromNumber: toNumber,
+        });
+
+        return new Response(JSON.stringify({ status: "unregistered" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Check user status
+      if (user.status !== "active") {
+        await ctx.runAction(api.sendblue.sendMessage, {
+          to: fromNumber,
+          content: `Your TalkCRM account is currently ${user.status}. Please contact support for assistance.`,
+          fromNumber: toNumber,
+        });
+
+        return new Response(JSON.stringify({ status: "inactive_user" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("Authenticated texter:", { userId: user._id, name: user.name });
+
+      // Log activity
+      await logActivity(ctx, "thinking", `Text from ${user.name}: "${content?.slice(0, 30)}${content?.length > 30 ? '...' : ''}"`, {
+        toolName: "ai_text",
+      });
+
+      // Process the message with AI using scheduler to ensure it runs
+      await ctx.scheduler.runAfter(0, internal.sendblue.processIncomingText, {
+        userId: user._id,
+        userPhone: fromNumber,
+        sendblueNumber: toNumber,
+        messageContent: content || "[Media message]",
+        messageHandle: messageHandle,
+        mediaUrl: mediaUrl,
+      });
+
+      // Respond immediately to acknowledge receipt
+      return new Response(JSON.stringify({ status: "processing" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue incoming webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * SendBlue message status callback webhook
+ * Called when message status changes (QUEUED, SENT, DELIVERED, READ, ERROR)
+ */
+http.route({
+  path: "/webhooks/sendblue/status",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      // Read body as text first for signature verification
+      const bodyText = await request.text();
+
+      // Verify webhook signature
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        console.error("Invalid SendBlue webhook signature");
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue status callback:", body);
+
+      // SendBlue status callback payload:
+      // {
+      //   message_handle, status, error_code, error_message,
+      //   date_sent, date_updated, to_number, from_number, service
+      // }
+
+      const messageHandle = body.message_handle;
+      const status = body.status;
+      const errorMessage = body.error_message;
+      const service = body.service;
+
+      if (!messageHandle) {
+        return new Response(JSON.stringify({ error: "Missing message_handle" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Map SendBlue status to our status
+      const statusMap: Record<string, "pending" | "queued" | "sent" | "delivered" | "read" | "failed"> = {
+        "REGISTERED": "pending",
+        "PENDING": "pending",
+        "QUEUED": "queued",
+        "ACCEPTED": "queued",
+        "SENT": "sent",
+        "DELIVERED": "delivered",
+        "READ": "read",
+        "ERROR": "failed",
+        "DECLINED": "failed",
+      };
+
+      const mappedStatus = statusMap[status] || "pending";
+
+      // Update message status in database
+      await ctx.runMutation(internal.textMessages.updateMessageStatus, {
+        messageHandle,
+        status: mappedStatus,
+        errorMessage: errorMessage || undefined,
+        service: service as "iMessage" | "SMS" | undefined,
+      });
+
+      return new Response(JSON.stringify({ status: "updated" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue status webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * SendBlue call logs webhook
+ * Called when a call is made to/from a SendBlue number
+ */
+http.route({
+  path: "/webhooks/sendblue/call-logs",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue call log:", body);
+
+      // Log call activity for tracking
+      await logActivity(ctx, "found", `Call log: ${body.from_number} -> ${body.to_number} (${body.duration || 0}s)`, {
+        toolName: "sendblue_call",
+      });
+
+      return new Response(JSON.stringify({ status: "received" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue call logs webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * SendBlue line blocked webhook
+ * Called when a recipient blocks messages from the SendBlue number
+ */
+http.route({
+  path: "/webhooks/sendblue/line-blocked",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue line blocked:", body);
+
+      const blockedNumber = body.number || body.to_number;
+
+      // Find user by phone and mark as blocked
+      if (blockedNumber) {
+        const user = await ctx.runQuery(internal.users.getUserByPhoneInternal, {
+          phone: blockedNumber,
+        });
+
+        if (user) {
+          console.log(`User ${user._id} blocked SendBlue number`);
+          await logActivity(ctx, "error", `Line blocked by ${blockedNumber}`, {
+            toolName: "sendblue_blocked",
+          });
+        }
+      }
+
+      return new Response(JSON.stringify({ status: "received" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue line blocked webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * SendBlue line assigned webhook
+ * Called when a new phone number is assigned to the SendBlue account
+ */
+http.route({
+  path: "/webhooks/sendblue/line-assigned",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue line assigned:", body);
+
+      const assignedNumber = body.number || body.phone_number;
+
+      await logActivity(ctx, "success", `New SendBlue line assigned: ${assignedNumber}`, {
+        toolName: "sendblue_line",
+      });
+
+      return new Response(JSON.stringify({ status: "received" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue line assigned webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * SendBlue outbound messages webhook
+ * Called when a message is sent from the SendBlue dashboard or API
+ * This is separate from status updates - it's for tracking all outbound sends
+ */
+http.route({
+  path: "/webhooks/sendblue/outbound",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue outbound message:", body);
+
+      // Log for audit trail - these are messages we sent
+      const toNumber = body.to_number || body.number;
+      const content = body.content || "";
+
+      await logActivity(ctx, "success", `Outbound text to ${toNumber}: "${content.slice(0, 30)}${content.length > 30 ? '...' : ''}"`, {
+        toolName: "sendblue_outbound",
+      });
+
+      return new Response(JSON.stringify({ status: "received" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue outbound webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+/**
+ * SendBlue contact created webhook
+ * Called when a new contact is created in SendBlue
+ */
+http.route({
+  path: "/webhooks/sendblue/contact-created",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const isValid = await verifySendBlueSignature(request, bodyText);
+      if (!isValid) {
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const body = JSON.parse(bodyText);
+      console.log("SendBlue contact created:", body);
+
+      const contactNumber = body.number || body.phone_number;
+      const contactName = body.name || body.first_name || "";
+
+      await logActivity(ctx, "creating", `SendBlue contact created: ${contactName || contactNumber}`, {
+        toolName: "sendblue_contact",
+      });
+
+      return new Response(JSON.stringify({ status: "received" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("SendBlue contact created webhook error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }),
+});
+
+// ============================================================================
+// ADMIN ENDPOINTS (temporary - for testing)
+// ============================================================================
+
+/**
+ * Create or activate a user account
+ * POST /admin/activate-user
+ */
+http.route({
+  path: "/admin/activate-user",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { email, phone, name } = body;
+      console.log("Admin user request:", { email, phone, name });
+
+      if (!email) {
+        return corsResponse({ error: "email required" }, 400);
+      }
+
+      // Get user by email
+      let user = await ctx.runQuery(api.users.getUserByEmail, { email });
+
+      if (!user && phone && name) {
+        // Create new user with phone already verified
+        const result = await ctx.runMutation(api.users.createUser, {
+          email,
+          name,
+          phone,
+        });
+        user = await ctx.runQuery(api.users.getUserByEmail, { email });
+      }
+
+      if (!user) {
+        return corsResponse({ error: "User not found. Provide email, phone, and name to create." }, 404);
+      }
+
+      // Activate user
+      await ctx.runMutation(internal.users.activateUser, { userId: user._id });
+
+      return corsResponse({
+        success: true,
+        message: `User ${user.email} activated`,
+        status: "active",
+        userId: user._id
+      });
+    } catch (error: any) {
+      console.error("Activate user error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+http.route({
+  path: "/admin/activate-user",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
+ * Force refresh Salesforce token
+ * POST /admin/refresh-token
+ */
+http.route({
+  path: "/admin/refresh-token",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const email = body.email;
+
+      if (!email) {
+        return corsResponse({ error: "email required" }, 400);
+      }
+
+      const user = await ctx.runQuery(api.users.getUserByEmail, { email });
+      if (!user) {
+        return corsResponse({ error: "User not found" }, 404);
+      }
+
+      // Force a Salesforce API call which will trigger refresh if needed
+      const result = await ctx.runAction(api.salesforce.getMyOpportunities, {
+        userId: user._id,
+      });
+
+      return corsResponse({
+        success: true,
+        message: "Token refreshed/validated",
+        opportunitiesFound: result?.opportunities?.length || 0,
+      });
+    } catch (error: any) {
+      console.error("Refresh token error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+http.route({
+  path: "/admin/refresh-token",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+/**
+ * Check user auth status
+ * GET /admin/check-auth?email=...
+ */
+http.route({
+  path: "/admin/check-auth",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const email = url.searchParams.get("email");
+
+      if (!email) {
+        return corsResponse({ error: "email required" }, 400);
+      }
+
+      const user = await ctx.runQuery(api.users.getUserByEmail, { email });
+      if (!user) {
+        return corsResponse({ error: "User not found", email }, 404);
+      }
+
+      // Check for Salesforce auth
+      const auth = await ctx.runQuery(internal.salesforce.getAuthForUser, { userId: user._id });
+
+      return corsResponse({
+        user: {
+          id: user._id,
+          email: user.email,
+          name: user.name,
+          status: user.status,
+          phones: user.verifiedPhones,
+        },
+        salesforceAuth: auth ? {
+          hasAuth: true,
+          instanceUrl: auth.instanceUrl,
+          hasAccessToken: !!auth.accessToken,
+          hasRefreshToken: !!auth.refreshToken,
+          expiresAt: auth.expiresAt,
+          isExpired: auth.expiresAt ? auth.expiresAt < Date.now() : null,
+        } : {
+          hasAuth: false,
+        }
+      });
+    } catch (error: any) {
+      console.error("Check auth error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+// ============================================================================
+// ELEVENLABS WIDGET EMBED PAGE
+// Serves an HTML page that can be embedded in Salesforce LWC via iframe
+// ============================================================================
+
+/**
+ * ElevenLabs ConvAI Widget Page
+ * GET /widget/elevenlabs
+ * Returns an HTML page with the ElevenLabs conversational AI widget
+ */
+http.route({
+  path: "/widget/elevenlabs",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    // Allow passing a custom agent ID, or use default from env
+    const agentId = url.searchParams.get("agent_id") || process.env.ELEVENLABS_AGENT_ID || "";
+
+    // Optional dynamic variables from query params
+    const userPhone = url.searchParams.get("phone") || "";
+    const userId = url.searchParams.get("user_id") || "";
+    const userName = url.searchParams.get("user_name") || "";
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TalkCRM Voice Assistant</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .widget-container {
+      width: 100%;
+      max-width: 400px;
+      padding: 20px;
+      text-align: center;
+    }
+    .widget-title {
+      color: #1a1a2e;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .widget-subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    elevenlabs-convai {
+      display: block;
+      width: 100%;
+    }
+    .powered-by {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #999;
+    }
+    .powered-by a {
+      color: #0176d3;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="widget-container">
+    <elevenlabs-convai
+      agent-id="${agentId}"
+      ${userPhone ? `data-caller-phone="${userPhone}"` : ''}
+      ${userId ? `data-user-id="${userId}"` : ''}
+      ${userName ? `data-user-name="${userName}"` : ''}
+    ></elevenlabs-convai>
+    <p class="powered-by">Powered by <a href="https://talkcrm.com" target="_blank">TalkCRM</a></p>
+  </div>
+  <script src="https://unpkg.com/@elevenlabs/convai-widget-embed@beta" async type="text/javascript"></script>
+</body>
+</html>`;
+
+    return new Response(html, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Frame-Options": "ALLOWALL",
+        "Content-Security-Policy": "frame-ancestors *",
+      },
+    });
   }),
 });
 

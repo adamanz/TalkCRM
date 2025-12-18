@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CspTrustedSite xmlns="http://soap.sforce.com/2006/04/metadata">
-    <endpointUrl>https://gregarious-crocodile-506.convex.site</endpointUrl>
+    <endpointUrl>https://tough-raccoon-796.convex.site</endpointUrl>
     <isActive>true</isActive>
     <description>TalkCRM Backend API (Convex)</description>
     <context>All</context>

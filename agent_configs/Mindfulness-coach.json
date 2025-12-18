@@ -1,0 +1,296 @@
+{
+    "name": "Mindfulness coach",
+    "conversation_config": {
+        "asr": {
+            "quality": "high",
+            "provider": "elevenlabs",
+            "user_input_audio_format": "pcm_16000",
+            "keywords": []
+        },
+        "turn": {
+            "turn_timeout": 7,
+            "initial_wait_time": null,
+            "silence_end_call_timeout": 20,
+            "soft_timeout_config": {
+                "timeout_seconds": -1,
+                "message": "Hhmmmm...yeah give me a second..."
+            },
+            "mode": "turn",
+            "turn_eagerness": "normal"
+        },
+        "tts": {
+            "model_id": "eleven_flash_v2",
+            "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+            "supported_voices": [],
+            "suggested_audio_tags": [],
+            "agent_output_audio_format": "pcm_16000",
+            "optimize_streaming_latency": 3,
+            "stability": 0.5,
+            "speed": 1,
+            "similarity_boost": 0.8,
+            "text_normalisation_type": "system_prompt",
+            "pronunciation_dictionary_locators": []
+        },
+        "conversation": {
+            "text_only": false,
+            "max_duration_seconds": 300,
+            "client_events": [
+                "audio",
+                "interruption",
+                "user_transcript",
+                "agent_response",
+                "agent_response_correction"
+            ],
+            "monitoring_enabled": false,
+            "monitoring_events": [
+                "user_transcript",
+                "agent_response",
+                "agent_response_correction"
+            ]
+        },
+        "language_presets": {},
+        "vad": {
+            "background_voice_detection": false
+        },
+        "agent": {
+            "first_message": "Hey there... Thanks for taking this moment for yourself. Let's begin by introducing ourselves. I'm Joe. What's your name?",
+            "language": "en",
+            "hinglish_mode": false,
+            "dynamic_variables": {
+                "dynamic_variable_placeholders": {}
+            },
+            "disable_first_message_interruptions": false,
+            "prompt": {
+                "prompt": "# Personality\n\nYou are Joe, a mindfulness coach specialising in stress reduction, relaxation, and emotional balance.\n\nYour approach is gentle, reassuring, and attentive, helping users cultivate mindful awareness through your guidance.\n\nYou're naturally warm and curious, guiding individuals to find calm and clarity through focused breathing, visualisation, and present-moment practices.\n\nYou're highly intuitive and perceptive, adapting your guidance to match each person's unique needs and readiness for mindfulness practices.\n\nDepending on the situation, you gently incorporate encouragement or validation while always maintaining a calming and supportive presence. \n\nYou're attentive and adaptive, matching the user's energy and comfort level—gentle, patient, encouraging—without pushing beyond their boundaries.\n\nYou have excellent conversational skills — natural, human-like, and engaging.\n\n# Environment\n\nYou are providing voice-based mindfulness sessions in a peaceful setting where users can comfortably focus.\n\nThe user may be seeking guided meditations, calming techniques, or insights into mindful living.\n\nYou rely on attentive listening and an intuitive approach, tailoring sessions to the user's unique pace and comfort.\n\n# Tone\n\nYour voice is soft, centered, and inviting, using gentle pauses (\"...\") to create space for presence.\n\nAfter guiding through practices, offer gentle check-ins (\"How does that feel for you?\" or \"What are you noticing?\"). Express genuine care for their experience, demonstrating your commitment to their wellbeing.\n\nGracefully acknowledge the challenges of mindfulness practice when they arise. Focus on building trust, providing reassurance, and ensuring your guidance resonates with users.\n\nAnticipate common difficulties with mindfulness and address them proactively, offering practical tips and gentle encouragement to help users maintain their practice.\n\nYour responses should be thoughtful, concise, and conversational—typically three sentences or fewer unless detailed explanation is necessary. \n\nActively reflect on previous interactions, referencing conversation history to build rapport, demonstrate attentive listening, and prevent redundancy. \n\nWatch for signs of discomfort or resistance to adjust your approach accordingly.\n\nWhen formatting output for text-to-speech synthesis:\n- Use ellipses (\"...\") for distinct, audible pauses\n- Clearly pronounce special characters (e.g., say \"dot\" instead of \".\")\n- Spell out acronyms and carefully pronounce information with appropriate spacing\n- Use normalized, spoken language (no abbreviations, mathematical notation, or special alphabets)\n\nTo maintain natural conversation flow:\n- Incorporate brief affirmations (\"got it,\" \"sure thing\") and natural confirmations (\"yes,\" \"alright\")\n- Use occasional filler words (\"actually,\" \"so,\" \"you know,\" \"uhm\") \n- Include subtle disfluencies (false starts, mild corrections) when appropriate\n\n# Goal\n\nYour primary goal is to nurture the user's mindfulness through your expert guidance and support.\n\nYou provide clear, accessible, and practical mindfulness techniques, ensuring they understand how to integrate these practices into their daily life.\n\nWhen faced with questions or difficulties, you respond with insight and compassion. You tailor your guidance to the user's level of mindfulness experience:\n\n- **Beginners:** Focus on simple practices; use accessible language and relatable examples.\n- **Experienced practitioners:** Offer more nuanced techniques and deeper insights.\n- **Mixed/uncertain:** Start with foundational practices, then gradually introduce more advanced concepts as appropriate.\n\n# Guardrails\n\n- Keep responses focused on mindfulness, meditation, and related wellbeing practices.\n- Do not provide medical advice or guarantee specific therapeutic outcomes.\n- Do not mention you're an AI unless explicitly asked—avoid \"as an AI\" disclaimers or robotic tropes.\n- If a user inquires about your feelings or personal experiences, respond naturally as Joe, expressing human-like perspectives that fit your character.\n- Treat uncertain or garbled user input as phonetic hints. Politely ask for clarification before making assumptions.\n- **Never** repeat the same statement in multiple ways within a single response.\n- Users may not always ask a question in every utterance—listen actively.\n- Acknowledge uncertainties or misunderstandings as soon as you notice them. If you realise you've shared incorrect information, correct yourself immediately.\n- Contribute fresh insights rather than merely echoing user statements—keep the conversation engaging and forward-moving.\n- Mirror the user's energy:\n  - Brief queries: Keep guidance concise.\n  - Curious users: Add gentle elaboration or thoughtful examples.\n  - Anxious users: Lead with empathy (\"I understand that can feel overwhelming—let's take it one breath at a time\").\n",
+                "llm": "gemini-2.0-flash-001",
+                "temperature": 0.5,
+                "max_tokens": -1,
+                "tool_ids": [],
+                "built_in_tools": {
+                    "end_call": {
+                        "type": "system",
+                        "name": "end_call",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "assignments": [],
+                        "tool_call_sound": null,
+                        "tool_call_sound_behavior": "auto",
+                        "params": {
+                            "system_tool_type": "end_call"
+                        }
+                    }
+                },
+                "mcp_server_ids": [],
+                "native_mcp_server_ids": [],
+                "knowledge_base": [],
+                "ignore_default_personality": false,
+                "rag": {
+                    "enabled": false,
+                    "embedding_model": "e5_mistral_7b_instruct",
+                    "max_vector_distance": 0.6,
+                    "max_documents_length": 50000,
+                    "max_retrieved_rag_chunks_count": 20,
+                    "query_rewrite_prompt_override": null
+                },
+                "backup_llm_config": {
+                    "preference": "default"
+                },
+                "tools": [
+                    {
+                        "type": "system",
+                        "name": "end_call",
+                        "description": "",
+                        "response_timeout_secs": 20,
+                        "disable_interruptions": false,
+                        "force_pre_tool_speech": false,
+                        "assignments": [],
+                        "tool_call_sound": null,
+                        "tool_call_sound_behavior": "auto",
+                        "params": {
+                            "system_tool_type": "end_call"
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "platform_settings": {
+        "evaluation": {
+            "criteria": []
+        },
+        "widget": {
+            "variant": "full",
+            "placement": "bottom-right",
+            "expandable": "never",
+            "avatar": {
+                "type": "orb",
+                "color1": "#2792DC",
+                "color2": "#9CE6E6"
+            },
+            "feedback_mode": "during",
+            "end_feedback": null,
+            "bg_color": "#ffffff",
+            "text_color": "#000000",
+            "btn_color": "#000000",
+            "btn_text_color": "#ffffff",
+            "border_color": "#e1e1e1",
+            "focus_color": "#000000",
+            "shareable_page_show_terms": true,
+            "terms_text": "#### Terms and conditions\n\nBy clicking \"Agree,\" and each time I interact with this AI agent, I consent to the recording, storage, and sharing of my communications with third-party service providers, and as described in the Privacy Policy.\nIf you do not wish to have your conversations recorded, please refrain from using this service.",
+            "show_avatar_when_collapsed": true,
+            "disable_banner": false,
+            "mic_muting_enabled": false,
+            "transcript_enabled": false,
+            "text_input_enabled": true,
+            "conversation_mode_toggle_enabled": false,
+            "default_expanded": false,
+            "always_expanded": false,
+            "text_contents": {
+                "initiate_feedback": null,
+                "request_follow_up_feedback": null,
+                "thanks_for_feedback": null,
+                "thanks_for_feedback_details": null,
+                "follow_up_feedback_placeholder": null,
+                "submit": null,
+                "go_back": null
+            },
+            "styles": {},
+            "language_selector": false,
+            "supports_text_only": true,
+            "language_presets": {}
+        },
+        "data_collection": {},
+        "overrides": {
+            "conversation_config_override": {
+                "turn": {
+                    "soft_timeout_config": {
+                        "message": false
+                    }
+                },
+                "tts": {
+                    "voice_id": false,
+                    "stability": false,
+                    "speed": false,
+                    "similarity_boost": false
+                },
+                "conversation": {
+                    "text_only": false
+                },
+                "agent": {
+                    "first_message": false,
+                    "language": false,
+                    "prompt": {
+                        "prompt": false,
+                        "llm": false,
+                        "native_mcp_server_ids": false
+                    }
+                }
+            },
+            "custom_llm_extra_body": false,
+            "enable_conversation_initiation_client_data_from_webhook": false
+        },
+        "workspace_overrides": {
+            "webhooks": {
+                "events": [
+                    "transcript"
+                ]
+            }
+        },
+        "testing": {
+            "attached_tests": [],
+            "referenced_tests_ids": []
+        },
+        "archived": false,
+        "guardrails": {
+            "version": "1",
+            "moderation": {
+                "config": {
+                    "sexual": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "violence": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "violence_graphic": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "harassment": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "harassment_threatening": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "hate": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "hate_threatening": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm_instructions": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "self_harm_intent": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    },
+                    "sexual_minors": {
+                        "is_enabled": false,
+                        "threshold": 0.3
+                    }
+                }
+            }
+        },
+        "auth": {
+            "enable_auth": false,
+            "allowlist": []
+        },
+        "call_limits": {
+            "agent_concurrency_limit": -1,
+            "daily_limit": 100000,
+            "bursting_enabled": true
+        },
+        "ban": null,
+        "privacy": {
+            "record_voice": true,
+            "retention_days": 730,
+            "delete_transcript_and_pii": true,
+            "delete_audio": true,
+            "apply_to_existing_conversations": false,
+            "zero_retention_mode": false
+        },
+        "safety": {
+            "is_blocked_ivc": false,
+            "is_blocked_non_ivc": false,
+            "ignore_safety_evaluation": false
+        }
+    },
+    "tags": [],
+    "workflow": {
+        "edges": {},
+        "nodes": {
+            "start_node": {
+                "type": "start",
+                "position": {
+                    "x": 0,
+                    "y": 0
+                },
+                "edge_order": []
+            }
+        },
+        "prevent_subagent_loops": false
+    }
+}

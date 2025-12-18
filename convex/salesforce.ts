@@ -39,7 +39,17 @@ interface SalesforceAuth {
   instanceUrl: string;
 }
 
-async function getSalesforceAuth(ctx: any): Promise<SalesforceAuth> {
+interface GetAuthOptions {
+  userId?: string;           // Direct user ID
+  conversationId?: string;   // Look up user from conversation
+}
+
+interface OrgCredentials {
+  consumerKey: string;
+  consumerSecret: string;
+}
+
+async function getSalesforceAuth(ctx: any, options?: GetAuthOptions): Promise<SalesforceAuth> {
   // First check for direct token in environment (for demo/testing)
   const envToken = process.env.SALESFORCE_ACCESS_TOKEN;
   const envInstanceUrl = process.env.SALESFORCE_INSTANCE_URL;
@@ -80,27 +90,133 @@ async function getSalesforceAuth(ctx: any): Promise<SalesforceAuth> {
     return { accessToken: data.access_token, instanceUrl: data.instance_url };
   }
 
-  // Fall back to stored auth
+  // Resolve userId from options
+  let userId = options?.userId;
+
+  // If conversationId provided, look up the userId from the conversation
+  if (!userId && options?.conversationId) {
+    userId = await ctx.runQuery(internal.salesforce.getUserIdFromConversation, {
+      conversationId: options.conversationId,
+    });
+  }
+
+  // If we have a userId, get their specific auth
+  if (userId) {
+    const userAuth = await ctx.runQuery(internal.salesforce.getAuthForUser, {
+      userId,
+    });
+
+    if (userAuth) {
+      // Check if token is expired or expiring soon (5 min buffer) and refresh if needed
+      const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+      if (userAuth.expiresAt < Date.now() + REFRESH_BUFFER_MS) {
+        try {
+          // Look up per-org credentials for this instance
+          let orgCreds: OrgCredentials | undefined;
+          if (userAuth.instanceUrl) {
+            const normalizedUrl = userAuth.instanceUrl.replace(/\/$/, "").replace(".lightning.force.com", ".my.salesforce.com");
+            const orgCredRecord = await ctx.runQuery(internal.orgCredentials.getByInstance, {
+              instanceUrl: normalizedUrl,
+            });
+            if (orgCredRecord) {
+              orgCreds = {
+                consumerKey: orgCredRecord.consumerKey,
+                consumerSecret: orgCredRecord.consumerSecret,
+              };
+              console.log(`Found org credentials for ${normalizedUrl}`);
+            } else {
+              console.log(`No org credentials found for ${normalizedUrl}, falling back to env vars`);
+            }
+          }
+
+          const refreshed = await refreshSalesforceToken(userAuth.refreshToken, userAuth.instanceUrl, orgCreds);
+          await ctx.runMutation(internal.salesforce.updateAuthForUser, {
+            userId,
+            ...refreshed,
+          });
+          console.log(`Refreshed Salesforce token for user ${userId}`);
+          return { accessToken: refreshed.accessToken, instanceUrl: refreshed.instanceUrl };
+        } catch (refreshError: any) {
+          // If refresh fails, clear the bad auth so user is prompted to re-connect
+          console.error(`Token refresh failed for user ${userId}:`, refreshError.message);
+          if (refreshError.message.includes("app_not_found") ||
+              refreshError.message.includes("invalid_grant") ||
+              refreshError.message.includes("expired") ||
+              refreshError.message.includes("No OAuth credentials")) {
+            await ctx.runMutation(internal.salesforce.clearAuthForUser, { userId });
+            throw new Error("Salesforce session expired. Please reconnect your Salesforce account.");
+          }
+          throw refreshError;
+        }
+      }
+      return { accessToken: userAuth.accessToken, instanceUrl: userAuth.instanceUrl };
+    }
+  }
+
+  // Fall back to stored auth (legacy/demo mode)
   const auth = await ctx.runQuery(internal.salesforce.getStoredAuth);
   if (!auth) {
     throw new Error("Salesforce not connected. Please set SALESFORCE_ACCESS_TOKEN and SALESFORCE_INSTANCE_URL, or configure OAuth credentials.");
   }
 
-  // Check if token is expired and refresh if needed
-  if (auth.expiresAt < Date.now()) {
-    const refreshed = await refreshSalesforceToken(auth.refreshToken);
-    await ctx.runMutation(internal.salesforce.updateAuth, refreshed);
-    return { accessToken: refreshed.accessToken, instanceUrl: refreshed.instanceUrl };
+  // Check if token is expired or expiring soon (5 min buffer) and refresh if needed
+  const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+  if (auth.expiresAt < Date.now() + REFRESH_BUFFER_MS) {
+    try {
+      // Look up per-org credentials for this instance (legacy auth may also be per-org)
+      let orgCreds: OrgCredentials | undefined;
+      if (auth.instanceUrl) {
+        const normalizedUrl = auth.instanceUrl.replace(/\/$/, "").replace(".lightning.force.com", ".my.salesforce.com");
+        const orgCredRecord = await ctx.runQuery(internal.orgCredentials.getByInstance, {
+          instanceUrl: normalizedUrl,
+        });
+        if (orgCredRecord) {
+          orgCreds = {
+            consumerKey: orgCredRecord.consumerKey,
+            consumerSecret: orgCredRecord.consumerSecret,
+          };
+          console.log(`Found org credentials for legacy auth: ${normalizedUrl}`);
+        }
+      }
+
+      const refreshed = await refreshSalesforceToken(auth.refreshToken, auth.instanceUrl, orgCreds);
+      await ctx.runMutation(internal.salesforce.updateAuth, refreshed);
+      console.log("Refreshed Salesforce token (legacy auth)");
+      return { accessToken: refreshed.accessToken, instanceUrl: refreshed.instanceUrl };
+    } catch (refreshError: any) {
+      console.error("Token refresh failed (legacy auth):", refreshError.message);
+      throw new Error("Salesforce session expired. Please reconnect your Salesforce account.");
+    }
   }
 
   return { accessToken: auth.accessToken, instanceUrl: auth.instanceUrl };
 }
 
-async function refreshSalesforceToken(refreshToken: string) {
-  const clientId = process.env.SALESFORCE_CLIENT_ID!;
-  const clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
+async function refreshSalesforceToken(
+  refreshToken: string,
+  instanceUrl?: string,
+  orgCredentials?: OrgCredentials
+) {
+  // Use per-org credentials if provided, otherwise fall back to env vars
+  const clientId = orgCredentials?.consumerKey || process.env.SALESFORCE_CLIENT_ID;
+  const clientSecret = orgCredentials?.consumerSecret || process.env.SALESFORCE_CLIENT_SECRET;
 
-  const response = await fetch("https://login.salesforce.com/services/oauth2/token", {
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      `No OAuth credentials available for token refresh. ` +
+      `Instance: ${instanceUrl || 'unknown'}. ` +
+      `Please ensure org credentials are configured.`
+    );
+  }
+
+  // Use the instance's token endpoint if available, otherwise default
+  const tokenUrl = instanceUrl
+    ? `${instanceUrl}/services/oauth2/token`
+    : "https://login.salesforce.com/services/oauth2/token";
+
+  console.log(`Refreshing Salesforce token for ${instanceUrl || 'default'} using ${orgCredentials ? 'org credentials' : 'env vars'}`);
+
+  const response = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -112,13 +228,17 @@ async function refreshSalesforceToken(refreshToken: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to refresh token: ${await response.text()}`);
+    const errorText = await response.text();
+    console.error(`Token refresh failed: ${response.status} - ${errorText}`);
+    throw new Error(`Failed to refresh token: ${errorText}`);
   }
 
   const data = await response.json();
+  console.log(`Token refresh successful for ${instanceUrl || 'default'}`);
+
   return {
     accessToken: data.access_token,
-    instanceUrl: data.instance_url,
+    instanceUrl: data.instance_url || instanceUrl,
     refreshToken: data.refresh_token || refreshToken,
     expiresAt: Date.now() + 7200 * 1000, // 2 hours
   };
@@ -160,6 +280,37 @@ export const getStoredAuth = internalQuery({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("salesforceAuth").first();
+  },
+});
+
+/**
+ * Get Salesforce auth for a specific user (multi-tenant)
+ */
+export const getAuthForUser = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("salesforceAuth")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+  },
+});
+
+/**
+ * Get userId from a conversation (for tool calls that pass conversation_id)
+ */
+export const getUserIdFromConversation = internalQuery({
+  args: {
+    conversationId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db
+      .query("conversations")
+      .withIndex("by_conversation_id", (q) => q.eq("conversationId", args.conversationId))
+      .first();
+    return conversation?.userId ?? null;
   },
 });
 
@@ -245,6 +396,26 @@ export const updateAuthForUser = internalMutation({
   },
 });
 
+/**
+ * Clear Salesforce auth for a user (when refresh fails or token is revoked)
+ */
+export const clearAuthForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("salesforceAuth")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      console.log(`Cleared Salesforce auth for user ${args.userId}`);
+    }
+  },
+});
+
 // ============================================================================
 // SALESFORCE ACTIONS (Called by ElevenLabs Server Tools)
 // ============================================================================
@@ -258,9 +429,15 @@ export const searchRecords = action({
     query: v.string(), // Natural language query OR raw SOQL
     objectType: v.optional(v.string()), // Account, Contact, Opportunity, etc.
     limit: v.optional(v.number()),
+    conversationId: v.optional(v.string()), // For user context
+    userId: v.optional(v.string()), // Direct user ID for auth lookup
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    // #region agent log (debug-session)
+    fetch('http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B',location:'convex/salesforce.ts:searchRecords:entry',message:'searchRecords entry',data:{hasUserId:!!args.userId,hasConversationId:!!args.conversationId,queryLen:args.query?.length ?? null,queryLooksSelect:(args.query||'').toUpperCase().startsWith('SELECT'),queryHasCURRENT_USER:(args.query||'').includes('CURRENT_USER'),queryHasCurlyUserId:(/\{userId\}/.test(args.query||''))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion agent log
+
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     // If it looks like SOQL, use it directly, otherwise build a query
     let soql = args.query;
@@ -283,10 +460,16 @@ export const searchRecords = action({
       };
     }
 
-    // Replace CURRENT_USER placeholder with actual user ID if present
-    if (soql.includes("CURRENT_USER")) {
+    // Replace user ID placeholders with actual Salesforce user ID
+    // Supports: CURRENT_USER, {userId}, {currentUser}, {me}, :userId
+    const userPlaceholderPattern = /['"]?CURRENT_USER['"]?|\{userId\}|\{currentUser\}|\{me\}|:userId/gi;
+    const hadUserPlaceholder = userPlaceholderPattern.test(soql);
+
+    if (hadUserPlaceholder) {
       const userInfo = await salesforceRequest(auth, "/chatter/users/me");
-      soql = soql.replace(/['"]?CURRENT_USER['"]?/g, `'${userInfo.id}'`);
+      // Reset regex lastIndex after test()
+      soql = soql.replace(/['"]?CURRENT_USER['"]?|\{userId\}|\{currentUser\}|\{me\}|:userId/gi, `'${userInfo.id}'`);
+      console.log(`Replaced user placeholder with Salesforce user ID: ${userInfo.id}`);
     }
 
     // Execute raw SOQL
@@ -307,9 +490,11 @@ export const getRecord = action({
     recordId: v.string(),
     objectType: v.string(),
     fields: v.optional(v.array(v.string())),
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     let endpoint = `/sobjects/${args.objectType}/${args.recordId}`;
     if (args.fields && args.fields.length > 0) {
@@ -328,18 +513,26 @@ export const createRecord = action({
   args: {
     objectType: v.string(),
     fields: v.any(), // Record fields as object
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     const result = await salesforceRequest(auth, `/sobjects/${args.objectType}`, {
       method: "POST",
       body: JSON.stringify(args.fields),
     });
 
+    // Build the record URL for Lightning Experience
+    const recordUrl = `${auth.instanceUrl}/lightning/r/${args.objectType}/${result.id}/view`;
+
     return {
       success: true,
       id: result.id,
+      recordUrl,
+      instanceUrl: auth.instanceUrl,
+      objectType: args.objectType,
       message: `Created new ${args.objectType} with ID ${result.id}`,
     };
   },
@@ -354,9 +547,11 @@ export const updateRecord = action({
     recordId: v.string(),
     objectType: v.string(),
     fields: v.any(), // Fields to update
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     await salesforceRequest(auth, `/sobjects/${args.objectType}/${args.recordId}`, {
       method: "PATCH",
@@ -378,9 +573,11 @@ export const deleteRecord = action({
   args: {
     recordId: v.string(),
     objectType: v.string(),
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     await salesforceRequest(auth, `/sobjects/${args.objectType}/${args.recordId}`, {
       method: "DELETE",
@@ -404,9 +601,11 @@ export const logCall = action({
     subject: v.string(),
     description: v.optional(v.string()),
     durationMinutes: v.optional(v.number()),
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     const task = {
       Subject: args.subject,
@@ -441,9 +640,11 @@ export const getMyTasks = action({
   args: {
     status: v.optional(v.string()), // Open, Completed, etc.
     dueDate: v.optional(v.string()), // TODAY, THIS_WEEK, etc.
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     let whereClause = "OwnerId = :userId";
     if (args.status === "open") {
@@ -493,9 +694,11 @@ export const getMyOpportunities = action({
   args: {
     stage: v.optional(v.string()), // Open, Closed Won, etc.
     closeDate: v.optional(v.string()), // THIS_QUARTER, THIS_MONTH, etc.
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
 
     // Get current user
     const userInfo = await salesforceRequest(auth, "/chatter/users/me");
@@ -545,14 +748,113 @@ export const getMyOpportunities = action({
 });
 
 /**
+ * Get current user's accounts
+ * Example: "Show me my accounts"
+ */
+export const getMyAccounts = action({
+  args: {
+    industry: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
+
+    // Get current Salesforce user
+    const userInfo = await salesforceRequest(auth, "/chatter/users/me");
+
+    let whereClause = `OwnerId = '${userInfo.id}'`;
+    if (args.industry) {
+      whereClause += ` AND Industry = '${args.industry}'`;
+    }
+
+    const soql = `SELECT Id, Name, Industry, AnnualRevenue, NumberOfEmployees, Website, Phone, BillingCity, BillingState
+                  FROM Account
+                  WHERE ${whereClause}
+                  ORDER BY Name ASC
+                  LIMIT ${args.limit || 25}`;
+
+    const result = await salesforceRequest(auth, `/query/?q=${encodeURIComponent(soql)}`);
+
+    return {
+      accounts: result.records.map((a: any) => ({
+        id: a.Id,
+        name: a.Name,
+        industry: a.Industry,
+        annualRevenue: a.AnnualRevenue,
+        employees: a.NumberOfEmployees,
+        website: a.Website,
+        phone: a.Phone,
+        location: a.BillingCity && a.BillingState ? `${a.BillingCity}, ${a.BillingState}` : null,
+      })),
+      count: result.totalSize,
+      userId: userInfo.id,
+      userName: userInfo.name,
+    };
+  },
+});
+
+/**
+ * Get current user's leads
+ * Example: "Show me my leads"
+ */
+export const getMyLeads = action({
+  args: {
+    status: v.optional(v.string()), // Open, Working, Converted, etc.
+    limit: v.optional(v.number()),
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
+
+    // Get current Salesforce user
+    const userInfo = await salesforceRequest(auth, "/chatter/users/me");
+
+    let whereClause = `OwnerId = '${userInfo.id}'`;
+    if (args.status === "open") {
+      whereClause += " AND IsConverted = false";
+    } else if (args.status === "converted") {
+      whereClause += " AND IsConverted = true";
+    }
+
+    const soql = `SELECT Id, Name, FirstName, LastName, Company, Email, Phone, Status, LeadSource, CreatedDate
+                  FROM Lead
+                  WHERE ${whereClause}
+                  ORDER BY CreatedDate DESC
+                  LIMIT ${args.limit || 25}`;
+
+    const result = await salesforceRequest(auth, `/query/?q=${encodeURIComponent(soql)}`);
+
+    return {
+      leads: result.records.map((l: any) => ({
+        id: l.Id,
+        name: l.Name,
+        company: l.Company,
+        email: l.Email,
+        phone: l.Phone,
+        status: l.Status,
+        source: l.LeadSource,
+        createdDate: l.CreatedDate,
+      })),
+      count: result.totalSize,
+      summary: `You have ${result.totalSize} lead${result.totalSize !== 1 ? 's' : ''}`,
+    };
+  },
+});
+
+/**
  * Describe an object's fields (for dynamic queries)
  */
 export const describeObject = action({
   args: {
     objectType: v.string(),
+    conversationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const auth = await getSalesforceAuth(ctx);
+    const auth = await getSalesforceAuth(ctx, { conversationId: args.conversationId, userId: args.userId });
     const result = await salesforceRequest(auth, `/sobjects/${args.objectType}/describe`);
 
     return {

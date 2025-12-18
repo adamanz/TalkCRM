@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useState, useEffect, createContext, useContext, ReactNode } from "react";
 import { Id } from "../convex/_generated/dataModel";
@@ -82,8 +82,14 @@ export default function App() {
   );
 }
 
+import LandingPage from "./LandingPage";
+
+// ... existing imports ...
+
 function AppContent() {
   const { user, isLoading } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return localStorage.getItem("talkcrm_onboarding_complete") !== "true";
   });
@@ -102,7 +108,21 @@ function AppContent() {
   }
 
   if (!user) {
-    return <AuthPage />;
+    if (showAuth) {
+      return <AuthPage initialMode={authMode} onBack={() => setShowAuth(false)} />;
+    }
+    return (
+      <LandingPage 
+        onLogin={() => {
+          setAuthMode("login");
+          setShowAuth(true);
+        }} 
+        onSignup={() => {
+          setAuthMode("signup");
+          setShowAuth(true);
+        }} 
+      />
+    );
   }
 
   // Show onboarding for new users
@@ -399,8 +419,8 @@ function OnboardingStep4({ userPhone, onComplete }: { userPhone: string; onCompl
 // AUTH PAGE - Login / Signup
 // ============================================================================
 
-function AuthPage() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+function AuthPage({ initialMode = "login", onBack }: { initialMode?: "login" | "signup", onBack?: () => void }) {
+  const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [step, setStep] = useState<"form" | "verify">("form");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -413,6 +433,12 @@ function AuthPage() {
 
   const convexUrl = import.meta.env.VITE_CONVEX_URL || "";
   const httpUrl = convexUrl.replace(".cloud", ".site");
+
+  useEffect(() => {
+    // #region agent log
+    fetch("http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "src/App.tsx:AuthPage", message: "AuthPage: derived Convex URLs", data: (() => { let parsed: { ok: boolean; protocol?: string; host?: string } = { ok: false }; try { const u = new URL(String(convexUrl)); parsed = { ok: true, protocol: u.protocol, host: u.host }; } catch { /* ignore */ } return { hasConvexUrl: Boolean(convexUrl), convexHost: parsed.host, convexProtocol: parsed.protocol, convexPreview: convexUrl.slice(0, 48), httpUrlPreview: httpUrl.slice(0, 48) }; })(), timestamp: Date.now(), sessionId: "debug-session", runId: "pre-fix", hypothesisId: "A" }) }).catch(() => {});
+    // #endregion
+  }, []);
 
   const handleStartVerification = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -428,6 +454,10 @@ function AuthPage() {
         ? { email, name, phone }
         : { phone };
 
+      // #region agent log
+      fetch("http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "src/App.tsx:AuthPage:startVerification", message: "Starting verification request", data: { mode, endpointPreview: endpoint.slice(0, 120) }, timestamp: Date.now(), sessionId: "debug-session", runId: "pre-fix", hypothesisId: "D" }) }).catch(() => {});
+      // #endregion
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -435,6 +465,9 @@ function AuthPage() {
       });
 
       const data = await response.json();
+      // #region agent log
+      fetch("http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "src/App.tsx:AuthPage:startVerification:resp", message: "Verification request response", data: { ok: response.ok, status: response.status }, timestamp: Date.now(), sessionId: "debug-session", runId: "pre-fix", hypothesisId: "D" }) }).catch(() => {});
+      // #endregion
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to send verification code");
@@ -459,6 +492,10 @@ function AuthPage() {
     setIsLoading(true);
 
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "src/App.tsx:AuthPage:verifyCode", message: "Verifying code request", data: { endpointPreview: `${httpUrl}/api/auth/verify`.slice(0, 120), codeLen: code.length }, timestamp: Date.now(), sessionId: "debug-session", runId: "pre-fix", hypothesisId: "D" }) }).catch(() => {});
+      // #endregion
+
       const response = await fetch(`${httpUrl}/api/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -488,39 +525,50 @@ function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-white text-4xl">📞</span>
+        <div className="text-center mb-10 relative">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="absolute left-0 top-0 text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1.5 text-sm font-medium"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+          )}
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <span className="text-white text-2xl">📞</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">TalkCRM</h1>
-          <p className="text-blue-200 mt-2">Voice-Powered Salesforce Assistant</p>
+          <h1 className="text-2xl font-semibold text-slate-900">TalkCRM</h1>
+          <p className="text-slate-600 mt-1.5 text-sm">Voice-Powered Salesforce Assistant</p>
         </div>
 
         {/* Auth Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-white border border-slate-200/60 rounded-lg p-8 shadow-sm">
           {step === "form" ? (
             <>
               {/* Mode Toggle */}
-              <div className="flex mb-6 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+              <div className="flex mb-6 bg-slate-50 rounded-lg p-1 border border-slate-200/60">
                 <button
                   onClick={() => setMode("login")}
-                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
                     mode === "login"
-                      ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow"
-                      : "text-slate-600 dark:text-slate-400"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   Log In
                 </button>
                 <button
                   onClick={() => setMode("signup")}
-                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
                     mode === "signup"
-                      ? "bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow"
-                      : "text-slate-600 dark:text-slate-400"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   Sign Up
@@ -531,7 +579,7 @@ function AuthPage() {
                 {mode === "signup" && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
                         Name
                       </label>
                       <input
@@ -539,12 +587,12 @@ function AuthPage() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="John Smith"
-                        className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
                         Email
                       </label>
                       <input
@@ -552,7 +600,7 @@ function AuthPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="john@company.com"
-                        className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
                         required
                       />
                     </div>
@@ -560,7 +608,7 @@ function AuthPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Phone Number
                   </label>
                   <input
@@ -568,16 +616,16 @@ function AuthPage() {
                     value={phone}
                     onChange={(e) => setPhone(formatPhone(e.target.value))}
                     placeholder="(415) 555-1234"
-                    className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm font-mono"
                     required
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-2">
                     This phone will be used to authenticate your calls
                   </p>
                 </div>
 
                 {error && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
@@ -585,7 +633,7 @@ function AuthPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                  className="w-full py-2.5 px-4 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
                 >
                   {isLoading ? "Sending Code..." : "Send Verification Code"}
                 </button>
@@ -599,21 +647,24 @@ function AuthPage() {
                   setCode("");
                   setDevCode(null);
                 }}
-                className="text-blue-500 text-sm mb-4 hover:underline"
+                className="text-slate-600 text-sm mb-6 hover:text-slate-900 transition-colors flex items-center gap-1.5"
               >
-                &larr; Back
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
               </button>
 
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+              <h2 className="text-xl font-semibold text-slate-900 mb-2">
                 Enter Verification Code
               </h2>
-              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+              <p className="text-slate-600 text-sm mb-6">
                 We sent a 6-digit code to {phone}
               </p>
 
               {devCode && (
-                <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 text-sm rounded-lg mb-4">
-                  <strong>Dev Mode:</strong> Your code is <code className="font-mono font-bold">{devCode}</code>
+                <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-lg mb-4">
+                  <strong>Dev Mode:</strong> Your code is <code className="font-mono font-bold ml-1">{devCode}</code>
                 </div>
               )}
 
@@ -624,14 +675,14 @@ function AuthPage() {
                     value={code}
                     onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="000000"
-                    className="w-full px-4 py-4 text-center text-2xl font-mono tracking-widest rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-4 text-center text-2xl font-mono tracking-widest rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     maxLength={6}
                     required
                   />
                 </div>
 
                 {error && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
                     {error}
                   </div>
                 )}
@@ -639,7 +690,7 @@ function AuthPage() {
                 <button
                   type="submit"
                   disabled={isLoading || code.length !== 6}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                  className="w-full py-2.5 px-4 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
                 >
                   {isLoading ? "Verifying..." : "Verify & Continue"}
                 </button>
@@ -649,7 +700,7 @@ function AuthPage() {
         </div>
 
         {/* Info */}
-        <p className="text-center text-blue-200/60 text-sm mt-6">
+        <p className="text-center text-slate-500 text-xs mt-6">
           Your phone number is how we identify you when you call.
           <br />
           No password needed - just call from your registered phone!
@@ -764,6 +815,12 @@ function Dashboard({ userId }: { userId: Id<"users"> }) {
 
   const convexUrl = import.meta.env.VITE_CONVEX_URL || "";
   const httpUrl = convexUrl.replace(".cloud", ".site");
+
+  useEffect(() => {
+    // #region agent log
+    fetch("http://127.0.0.1:7244/ingest/1e251e9c-b8aa-4e39-b968-d4efd22e542b", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "src/App.tsx:Dashboard", message: "Dashboard: derived Convex URLs", data: { hasConvexUrl: Boolean(convexUrl), convexPreview: convexUrl.slice(0, 48), httpUrlPreview: httpUrl.slice(0, 48) }, timestamp: Date.now(), sessionId: "debug-session", runId: "pre-fix", hypothesisId: "B" }) }).catch(() => {});
+    // #endregion
+  }, []);
 
   const connectSalesforce = () => {
     const returnUrl = encodeURIComponent(window.location.href);

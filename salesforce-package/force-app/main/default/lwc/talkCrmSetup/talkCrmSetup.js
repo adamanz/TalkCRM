@@ -1,10 +1,15 @@
 import { LightningElement, track } from 'lwc';
+import getSetupState from '@salesforce/apex/TalkCrmController.getSetupState';
+import saveCredentials from '@salesforce/apex/TalkCrmController.saveCredentials';
+import saveUserConnection from '@salesforce/apex/TalkCrmController.saveUserConnection';
 import sendVerificationCode from '@salesforce/apex/TalkCrmController.sendVerificationCode';
 import verifyCode from '@salesforce/apex/TalkCrmController.verifyCode';
+import clearUserVerification from '@salesforce/apex/TalkCrmController.clearUserVerification';
+import clearUserConnection from '@salesforce/apex/TalkCrmController.clearUserConnection';
 
 export default class TalkCrmSetup extends LightningElement {
     @track currentStep = '1';
-    @track isLoading = false;
+    @track isLoading = true; // Start with loading state
     @track errorMessage = '';
     @track successMessage = '';
 
@@ -38,15 +43,59 @@ export default class TalkCrmSetup extends LightningElement {
         return window.location.origin;
     }
 
-    connectedCallback() {
-        // Check URL params for OAuth callback
-        this.checkOAuthCallback();
-        // Check if already set up
-        this.checkExistingSetup();
+    async connectedCallback() {
+        // Check URL params for OAuth callback first
+        await this.checkOAuthCallback();
+        // Then load setup state from server
+        await this.loadSetupState();
     }
 
-    checkOAuthCallback() {
-        // Check URL query params
+    async loadSetupState() {
+        this.isLoading = true;
+        try {
+            const state = await getSetupState();
+            console.log('Setup state from server:', state);
+
+            // Set state from server response
+            this.credentialsConfigured = state.orgConfigured === true;
+
+            if (state.talkCrmUserId) {
+                this.isConnected = true;
+                this.userId = state.talkCrmUserId;
+                this.userEmail = state.userEmail || 'Connected';
+            }
+
+            if (state.userVerified && state.verifiedPhone) {
+                this.phoneNumber = state.verifiedPhone;
+            }
+
+            // Determine current step based on server state
+            if (state.userVerified && state.verifiedPhone) {
+                // User has verified phone - show completion
+                this.currentStep = '4';
+            } else if (state.talkCrmUserId) {
+                // User is OAuth connected but hasn't verified phone
+                this.currentStep = '3';
+            } else if (state.orgConfigured) {
+                // Org is configured but user hasn't connected
+                this.currentStep = '2';
+            } else {
+                // Nothing configured yet
+                this.currentStep = '1';
+            }
+
+        } catch (error) {
+            console.error('Error loading setup state:', error);
+            this.errorMessage = 'Failed to load setup state. Please refresh the page.';
+            // Default to step 1 on error
+            this.currentStep = '1';
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    async checkOAuthCallback() {
+        // Check URL query params for OAuth callback
         const urlParams = new URLSearchParams(window.location.search);
         let userId = urlParams.get('talkcrm_user_id');
         let email = urlParams.get('talkcrm_email');
@@ -59,43 +108,22 @@ export default class TalkCrmSetup extends LightningElement {
         }
 
         if (userId) {
-            this.isConnected = true;
-            this.userId = userId;
-            this.userEmail = email || 'Connected';
-            // Store in localStorage for persistence
-            localStorage.setItem('talkcrm_user_id', userId);
-            localStorage.setItem('talkcrm_email', email || '');
+            console.log('OAuth callback detected, saving user connection:', userId);
+
+            // Save the connection to the User record
+            try {
+                await saveUserConnection({ talkCrmUserId: userId });
+                this.isConnected = true;
+                this.userId = userId;
+                this.userEmail = email || 'Connected';
+                this.successMessage = 'Salesforce connected successfully!';
+            } catch (error) {
+                console.error('Error saving user connection:', error);
+                this.errorMessage = 'Failed to save connection. Please try again.';
+            }
+
             // Clean URL
             window.history.replaceState({}, document.title, window.location.pathname);
-        }
-    }
-
-    checkExistingSetup() {
-        const storedUserId = localStorage.getItem('talkcrm_user_id');
-        const storedEmail = localStorage.getItem('talkcrm_email');
-        const storedPhone = localStorage.getItem('talkcrm_phone');
-        const setupComplete = localStorage.getItem('talkcrm_setup_complete');
-        const storedConsumerKey = localStorage.getItem('talkcrm_consumer_key');
-
-        if (storedConsumerKey) {
-            this.consumerKey = storedConsumerKey;
-            this.credentialsConfigured = true;
-        }
-
-        if (storedUserId) {
-            this.isConnected = true;
-            this.userId = storedUserId;
-            this.userEmail = storedEmail || 'Connected';
-        }
-
-        // Determine current step based on saved state
-        if (setupComplete === 'true' && storedPhone) {
-            this.phoneNumber = storedPhone;
-            this.currentStep = '4';
-        } else if (storedUserId) {
-            this.currentStep = '3';
-        } else if (storedConsumerKey) {
-            this.currentStep = '2';
         }
     }
 
@@ -118,29 +146,13 @@ export default class TalkCrmSetup extends LightningElement {
         this.errorMessage = '';
 
         try {
-            // Register credentials with TalkCRM backend
-            const TALKCRM_API_URL = 'https://gregarious-crocodile-506.convex.site';
-            const instanceUrl = window.location.origin;
-
-            const response = await fetch(`${TALKCRM_API_URL}/api/org/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    instanceUrl,
-                    consumerKey: this.consumerKey,
-                    consumerSecret: this.consumerSecret
-                })
+            // Register credentials with TalkCRM backend via Apex
+            // This also marks the org as configured
+            await saveCredentials({
+                consumerKey: this.consumerKey,
+                consumerSecret: this.consumerSecret
             });
 
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to register credentials');
-            }
-
-            // Save consumer key locally (not secret for security)
-            localStorage.setItem('talkcrm_consumer_key', this.consumerKey);
-            localStorage.setItem('talkcrm_instance_url', instanceUrl);
             this.credentialsConfigured = true;
             this.successMessage = 'Credentials saved successfully!';
 
@@ -151,7 +163,7 @@ export default class TalkCrmSetup extends LightningElement {
             }, 1500);
 
         } catch (error) {
-            this.errorMessage = error.message || 'Failed to save credentials';
+            this.errorMessage = error.body?.message || error.message || 'Failed to save credentials';
         } finally {
             this.isLoading = false;
         }
@@ -167,7 +179,7 @@ export default class TalkCrmSetup extends LightningElement {
 
         // Redirect to TalkCRM OAuth initiation endpoint with instance URL
         // The backend will look up credentials for this org
-        const TALKCRM_API_URL = 'https://gregarious-crocodile-506.convex.site';
+        const TALKCRM_API_URL = 'https://tough-raccoon-796.convex.site';
         const callbackUrl = encodeURIComponent(window.location.href.split('?')[0]);
         const oauthUrl = `${TALKCRM_API_URL}/auth/salesforce/initiate?callback_url=${callbackUrl}&instance_url=${encodeURIComponent(instanceUrl)}`;
 
@@ -227,14 +239,13 @@ export default class TalkCrmSetup extends LightningElement {
         this.errorMessage = '';
 
         try {
+            // This also saves verification status to User record
             await verifyCode({
                 phone: this.phoneNumber,
                 code: this.verificationCode
             });
 
-            // Success! Save and move to step 4
-            localStorage.setItem('talkcrm_phone', this.phoneNumber);
-            localStorage.setItem('talkcrm_setup_complete', 'true');
+            // Success! Move to step 4
             this.currentStep = '4';
         } catch (error) {
             this.errorMessage = error.body ? error.body.message : error.message;
@@ -244,56 +255,79 @@ export default class TalkCrmSetup extends LightningElement {
     }
 
     // Settings Management
-    handleChangePhone() {
-        // Go back to step 3 to change phone number
-        this.codeSent = false;
-        this.verificationCode = '';
-        this.phoneNumber = '';
+    async handleChangePhone() {
+        this.isLoading = true;
         this.errorMessage = '';
-        this.currentStep = '3';
+
+        try {
+            // Clear verification on server
+            await clearUserVerification();
+
+            // Reset UI state
+            this.codeSent = false;
+            this.verificationCode = '';
+            this.phoneNumber = '';
+            this.currentStep = '3';
+        } catch (error) {
+            this.errorMessage = error.body ? error.body.message : error.message;
+        } finally {
+            this.isLoading = false;
+        }
     }
 
-    handleReconnectSalesforce() {
-        // Clear Salesforce auth and restart OAuth flow
-        localStorage.removeItem('talkcrm_user_id');
-        localStorage.removeItem('talkcrm_email');
-        this.isConnected = false;
-        this.userId = '';
-        this.userEmail = '';
+    async handleReconnectSalesforce() {
+        this.isLoading = true;
         this.errorMessage = '';
-        // Go to step 2 (OAuth)
-        this.currentStep = '2';
+
+        try {
+            // Clear connection on server
+            await clearUserConnection();
+
+            // Reset UI state
+            this.isConnected = false;
+            this.userId = '';
+            this.userEmail = '';
+            this.currentStep = '2';
+        } catch (error) {
+            this.errorMessage = error.body ? error.body.message : error.message;
+        } finally {
+            this.isLoading = false;
+        }
     }
 
     handleReconfigureCredentials() {
         // Go back to step 1 to reconfigure credentials
+        // Note: Org-level config is preserved, this just lets admin update credentials
         this.errorMessage = '';
         this.currentStep = '1';
     }
 
-    handleResetAll() {
+    async handleResetAll() {
         // Confirm before resetting
-        if (confirm('Are you sure you want to reset all TalkCRM settings? You will need to reconfigure everything.')) {
-            // Clear all localStorage
-            localStorage.removeItem('talkcrm_consumer_key');
-            localStorage.removeItem('talkcrm_instance_url');
-            localStorage.removeItem('talkcrm_user_id');
-            localStorage.removeItem('talkcrm_email');
-            localStorage.removeItem('talkcrm_phone');
-            localStorage.removeItem('talkcrm_setup_complete');
-
-            // Reset component state
-            this.credentialsConfigured = false;
-            this.consumerKey = '';
-            this.consumerSecret = '';
-            this.isConnected = false;
-            this.userId = '';
-            this.userEmail = '';
-            this.phoneNumber = '';
-            this.codeSent = false;
-            this.verificationCode = '';
+        if (confirm('Are you sure you want to reset your TalkCRM settings? You will need to verify your phone again.')) {
+            this.isLoading = true;
             this.errorMessage = '';
-            this.currentStep = '1';
+
+            try {
+                // Clear user-level data on server
+                await clearUserConnection();
+                await clearUserVerification();
+
+                // Reset component state
+                this.isConnected = false;
+                this.userId = '';
+                this.userEmail = '';
+                this.phoneNumber = '';
+                this.codeSent = false;
+                this.verificationCode = '';
+
+                // Go to step 2 (org credentials are preserved)
+                this.currentStep = '2';
+            } catch (error) {
+                this.errorMessage = error.body ? error.body.message : error.message;
+            } finally {
+                this.isLoading = false;
+            }
         }
     }
 }

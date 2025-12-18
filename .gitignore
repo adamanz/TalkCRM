@@ -28,3 +28,4 @@ dist-ssr
 
 # Pulled configs (not needed in repo)
 tool_configs_pulled/
+.vercel

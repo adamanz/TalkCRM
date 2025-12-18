@@ -1,0 +1,89 @@
+{
+    "type": "api_integration_webhook",
+    "name": "calcom_get_all_bookings",
+    "description": "Get a list of all bookings. Can filter by status, date range, and other criteria. You only need to pass a single event type id or multiple event type ids, no other fields are strictly required.",
+    "response_timeout_secs": 20,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "tool_version": "1.0.0",
+    "api_integration_id": "calcom",
+    "api_integration_connection_id": "icxn_6101kcppvzk9fv59xn4chmm3mv5v",
+    "api_schema_overrides": null,
+    "base_api_schema": {
+        "request_headers": {
+            "cal-api-version": "2024-08-13"
+        },
+        "url": "https://api.cal.com/v2/bookings",
+        "method": "GET",
+        "path_params_schema": {},
+        "query_params_schema": {
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Filter bookings by status, this is optional",
+                    "enum": [
+                        "upcoming",
+                        "recurring",
+                        "past",
+                        "cancelled",
+                        "unconfirmed"
+                    ],
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "attendee_email": {
+                    "type": "string",
+                    "description": "Filter bookings by attendee email address, this is optional",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "attendee_name": {
+                    "type": "string",
+                    "description": "Filter bookings by the attendee's name, this is optional",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "event_type_ids": {
+                    "type": "string",
+                    "description": "Filter bookings by event type IDs, comma separated ids, this or eventTypeId is required ",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "event_type_id": {
+                    "type": "string",
+                    "description": "Filter bookings by event type IDm this or eventTypeIds is required ",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "take": {
+                    "type": "integer",
+                    "description": "Maximum number of bookings to return (default: 100), this is optional",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            },
+            "required": []
+        },
+        "request_body_schema": null,
+        "content_type": "application/json",
+        "auth_connection": null
+    }
+}

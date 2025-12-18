@@ -34,8 +34,8 @@ export const createCoachingSession = internalMutation({
       status: "active",
       startedAt: Date.now(),
       interactions: [],
-      score: null,
-      feedback: null,
+      score: undefined,
+      feedback: undefined,
     });
 
     return sessionId;

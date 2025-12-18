@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CspTrustedSite xmlns="http://soap.sforce.com/2006/04/metadata">
+    <endpointUrl>https://api.elevenlabs.io</endpointUrl>
+    <isActive>true</isActive>
+    <description>ElevenLabs API for Voice AI</description>
+    <context>All</context>
+</CspTrustedSite>

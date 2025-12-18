@@ -91,6 +91,56 @@ The ElevenLabs agent has access to these Salesforce tools:
 | `get_my_tasks` | View open tasks and to-dos |
 | `get_my_pipeline` | View opportunities and pipeline summary |
 
+## AI Schema Context
+
+All three channels (voice, text, web) have access to rich Salesforce schema metadata, enabling the AI to understand your org's custom objects and fields:
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│ Voice Agent │     │ Text Agent  │     │  Web App    │
+│ (ElevenLabs)│     │ (SendBlue)  │     │             │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       │ user_id via       │ lookup by         │ user_id
+       │ dynamic_variables │ phone number      │ direct
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │ askSalesforce│
+                    │   (userId)   │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │ getAvailable│
+                    │   Objects   │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │ Claude with │
+                    │ rich context│
+                    └─────────────┘
+```
+
+### Org Metadata Sync
+
+The system automatically syncs your Salesforce org's schema:
+
+| Feature | Description |
+|---------|-------------|
+| **Custom Objects** | Discovers all custom objects (e.g., `Invoice__c`, `sendblue__Message__c`) |
+| **Field Metadata** | Captures field names, labels, types, picklist values |
+| **Record Counts** | Tracks how many records exist per object |
+| **Sample Fields** | Identifies which fields are commonly populated |
+| **Weekly Cron** | Auto-refreshes metadata every Sunday at 2am UTC |
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/org/sync-metadata` | POST | Manually trigger metadata sync |
+| `/api/org/metadata` | GET | View available objects for a user |
+
 ## Setup
 
 ### Prerequisites

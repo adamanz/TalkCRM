@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
     <label>TalkCRM User</label>
-    <description>Grants access to TalkCRM setup tab and Apex controller</description>
+    <description>Grants access to TalkCRM setup tab, Apex controller, and required fields</description>
     <hasActivationRequired>false</hasActivationRequired>
     <classAccesses>
         <apexClass>TalkCrmController</apexClass>
@@ -11,4 +11,23 @@
         <tab>TalkCRM_Setup</tab>
         <visibility>Visible</visibility>
     </tabSettings>
+    <customSettingAccesses>
+        <enabled>true</enabled>
+        <name>TalkCRM_Settings__c</name>
+    </customSettingAccesses>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>User.TalkCRM_Phone_Verified__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>User.TalkCRM_Verified_Phone__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>User.TalkCRM_User_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
 </PermissionSet>

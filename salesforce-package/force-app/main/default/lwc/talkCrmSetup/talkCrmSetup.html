@@ -1,17 +1,27 @@
 <template>
     <lightning-card title="TalkCRM Setup" icon-name="custom:custom14">
-        <!-- Step Indicator -->
-        <div class="slds-p-horizontal_medium">
-            <lightning-progress-indicator current-step={currentStep} type="path" variant="base">
-                <lightning-progress-step label="Configure App" value="1"></lightning-progress-step>
-                <lightning-progress-step label="Connect Salesforce" value="2"></lightning-progress-step>
-                <lightning-progress-step label="Verify Phone" value="3"></lightning-progress-step>
-                <lightning-progress-step label="Ready!" value="4"></lightning-progress-step>
-            </lightning-progress-indicator>
-        </div>
+        <!-- Loading State - shown during initial setup state fetch -->
+        <template lwc:if={isLoading}>
+            <div class="slds-p-around_large slds-text-align_center">
+                <lightning-spinner alternative-text="Loading setup state" size="medium"></lightning-spinner>
+                <p class="slds-m-top_medium slds-text-body_regular">Loading your setup status...</p>
+            </div>
+        </template>
 
-        <div class="slds-p-around_medium">
-            <!-- Step 1: Configure Connected App -->
+        <!-- Main Content - shown after setup state is loaded -->
+        <template lwc:else>
+            <!-- Step Indicator -->
+            <div class="slds-p-horizontal_medium">
+                <lightning-progress-indicator current-step={currentStep} type="path" variant="base">
+                    <lightning-progress-step label="Configure App" value="1"></lightning-progress-step>
+                    <lightning-progress-step label="Connect Salesforce" value="2"></lightning-progress-step>
+                    <lightning-progress-step label="Verify Phone" value="3"></lightning-progress-step>
+                    <lightning-progress-step label="Ready!" value="4"></lightning-progress-step>
+                </lightning-progress-indicator>
+            </div>
+
+            <div class="slds-p-around_medium">
+                <!-- Step 1: Configure Connected App -->
             <template lwc:if={isStep1}>
                 <div class="slds-text-align_center slds-p-around_large">
                     <lightning-icon icon-name="standard:connected_apps" size="large" class="slds-m-bottom_medium"></lightning-icon>
@@ -146,22 +156,48 @@
                     <lightning-icon icon-name="action:approval" size="large" class="slds-m-bottom_medium"></lightning-icon>
                     <h2 class="slds-text-heading_medium slds-m-bottom_small">You're All Set!</h2>
                     <p class="slds-text-body_regular slds-m-bottom_large">
-                        TalkCRM is ready to use. Call the number below to start managing your Salesforce by voice.
+                        TalkCRM is ready to use. Call or text the number below to manage your Salesforce.
                     </p>
 
-                    <div class="slds-box slds-theme_default slds-m-bottom_large" style="max-width: 400px; margin: 0 auto;">
-                        <h3 class="slds-text-heading_small slds-m-bottom_small">Call TalkCRM</h3>
-                        <p class="slds-text-heading_large slds-text-color_success">
-                            <lightning-icon icon-name="utility:call" size="small" class="slds-m-right_x-small"></lightning-icon>
-                            +1 (646) 600-5041
-                        </p>
-                        <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
-                            Registered phone: {phoneNumber}
-                        </p>
+                    <div class="slds-grid slds-wrap slds-gutters slds-m-bottom_large" style="max-width: 600px; margin: 0 auto;">
+                        <!-- Call Box -->
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
+                            <div class="slds-box slds-theme_default" style="height: 100%;">
+                                <h3 class="slds-text-heading_small slds-m-bottom_small">
+                                    <lightning-icon icon-name="utility:call" size="small" class="slds-m-right_x-small"></lightning-icon>
+                                    Call
+                                </h3>
+                                <p class="slds-text-heading_medium slds-text-color_success">
+                                    +1 (646) 600-5041
+                                </p>
+                                <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
+                                    Voice AI assistant
+                                </p>
+                            </div>
+                        </div>
+                        <!-- Text Box -->
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-m-bottom_small">
+                            <div class="slds-box slds-theme_default" style="height: 100%;">
+                                <h3 class="slds-text-heading_small slds-m-bottom_small">
+                                    <lightning-icon icon-name="utility:chat" size="small" class="slds-m-right_x-small"></lightning-icon>
+                                    Text
+                                </h3>
+                                <p class="slds-text-heading_medium slds-text-color_success">
+                                    +1 (656) 252-4906
+                                </p>
+                                <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
+                                    iMessage &amp; SMS supported
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
+                    <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                        Registered phone: {phoneNumber}
+                    </p>
+
                     <div class="slds-box slds-theme_shade slds-m-bottom_large" style="max-width: 500px; margin: 0 auto;">
-                        <h4 class="slds-text-title_bold slds-m-bottom_small">Try saying:</h4>
+                        <h4 class="slds-text-title_bold slds-m-bottom_small">Try saying or texting:</h4>
                         <ul class="slds-list_dotted slds-text-align_left">
                             <li>"What's in my pipeline?"</li>
                             <li>"Find the Acme account"</li>
@@ -233,6 +269,7 @@
                     {errorMessage}
                 </div>
             </template>
-        </div>
+            </div>
+        </template>
     </lightning-card>
 </template>

@@ -1,0 +1,63 @@
+{
+    "type": "api_integration_webhook",
+    "name": "calcom_get_available_slots",
+    "description": "Get available time slots for a specific event type. Use this to show available booking times to users. If an event type has been provided to you in the system prompt use it.",
+    "response_timeout_secs": 20,
+    "disable_interruptions": false,
+    "force_pre_tool_speech": false,
+    "assignments": [],
+    "tool_call_sound": null,
+    "tool_call_sound_behavior": "auto",
+    "dynamic_variables": {
+        "dynamic_variable_placeholders": {}
+    },
+    "execution_mode": "immediate",
+    "tool_version": "1.0.0",
+    "api_integration_id": "calcom",
+    "api_integration_connection_id": "icxn_6101kcppvzk9fv59xn4chmm3mv5v",
+    "api_schema_overrides": null,
+    "base_api_schema": {
+        "request_headers": {
+            "cal-api-version": "2024-09-04"
+        },
+        "url": "https://api.cal.com/v2/slots",
+        "method": "GET",
+        "path_params_schema": {},
+        "query_params_schema": {
+            "properties": {
+                "event_type_id": {
+                    "type": "integer",
+                    "description": "The ID of the event type to get available slots for. Only ask for this if absolutely necessary.",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "start": {
+                    "type": "string",
+                    "description": "Time starting from which available slots should be checked.Must be in UTC timezone as ISO 8601 date string.You can pass a date without hours, which defaults to the start of day, or specify hours:Example: '2024-08-13' (will have hours 00:00:00, i.e., at the very beginning of the date),or specify hours manually like '2024-08-13T09:00:00Z'.If this value is not in the future the API will return a 404.",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                },
+                "end": {
+                    "type": "string",
+                    "description": "Time until which available slots should be checked.Must be in UTC timezone as ISO 8601 date string.You can pass a date without hours, which defaults to end of day, or specify hours:Example: '2024-08-20' (will have hours 23:59:59, i.e., at the very end of the date),or specify hours manually like '2024-08-20T18:00:00Z'.",
+                    "enum": null,
+                    "is_system_provided": false,
+                    "dynamic_variable": "",
+                    "constant_value": ""
+                }
+            },
+            "required": [
+                "eventTypeId",
+                "start",
+                "end"
+            ]
+        },
+        "request_body_schema": null,
+        "content_type": "application/json",
+        "auth_connection": null
+    }
+}
