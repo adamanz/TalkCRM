@@ -1,9 +1,59 @@
 # TalkCRM Robots.txt
+# https://talkcrm.app
+
 User-agent: *
 Allow: /
 
-# Sitemap
+# Sitemaps
 Sitemap: https://talkcrm.app/sitemap.xml
 
-# Crawl-delay for polite crawling
+# Crawl-delay (optional, be friendly to crawlers)
 Crawl-delay: 1
+
+# Allow all major search engine bots
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+# Allow AI/LLM crawlers for AI search visibility
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+# Block known bad bots (scrapers, not search engines)
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
