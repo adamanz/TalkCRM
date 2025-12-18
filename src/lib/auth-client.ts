@@ -7,6 +7,9 @@ import {
 // Create the auth client for Better Auth + Convex
 export const authClient = createAuthClient({
   baseURL: import.meta.env.VITE_CONVEX_SITE_URL,
+  fetchOptions: {
+    credentials: "include",
+  },
   plugins: [
     crossDomainClient(),
     convexClient(),
