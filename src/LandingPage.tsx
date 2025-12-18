@@ -489,6 +489,16 @@ export default function LandingPage({ onLogin, onSignup, onNavigate }: LandingPa
               </a>
             </p>
           </div>
+          <div className="mt-6 text-center">
+            <a href="https://elevenlabs.io/startup-grants" target="_blank" rel="noopener noreferrer">
+              <img
+                src="https://eleven-public-cdn.elevenlabs.io/payloadcms/pwsc4vchsqt-ElevenLabsGrants.webp"
+                alt="ElevenLabs"
+                style={{ width: '250px' }}
+                className="inline-block"
+              />
+            </a>
+          </div>
         </div>
       </footer>
     </div>
