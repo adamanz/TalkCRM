@@ -71,6 +71,25 @@ SOQL DATE LITERALS (use these directly in SOQL - Salesforce handles them):
 - NEXT_N_DAYS:n (e.g., NEXT_N_DAYS:30 for next 30 days)
 - LAST_90_DAYS, NEXT_90_DAYS
 
+PHONE NUMBER LOOKUPS (CRITICAL):
+- Phone numbers in SMS/messaging objects are stored in E.164 format: +1XXXXXXXXXX (e.g., +18185881911)
+- When searching for a Lead/Contact by phone number from a conversation:
+  1. First check if the object has a direct lookup field to Lead/Contact (e.g., sendblue__Lead__c)
+  2. Query using the phone field AND return the lookup relationship data
+  3. Use relationship notation to get related record details (e.g., sendblue__Lead__r.Name)
+- Phone format normalization: Users may say "818-558-1911" but the field stores "+18185881911"
+  - Strip formatting: remove spaces, dashes, parentheses
+  - Add country code if missing: assume +1 for US numbers
+  - Store format: +1XXXXXXXXXX
+
+LOOKUP RELATIONSHIP QUERIES:
+- When a field has "referenceTo" and "relationshipName", you can traverse the relationship
+- Example: sendblue__Lead__c (reference to Lead, relationshipName: sendblue__Lead__r)
+  - To get the related Lead's name: SELECT sendblue__Lead__r.Name FROM sendblue__Conversation__c
+  - To check if a lead exists for a phone: SELECT Id, sendblue__Lead__c, sendblue__Lead__r.Name FROM sendblue__Conversation__c WHERE sendblue__Contact_Number__c = '+18185881911'
+- Always use the relationshipName (ending in __r) to access parent record fields
+- If sendblue__Lead__c is null, there is NO lead associated with that conversation
+
 Example SOQL with dates:
 - SELECT Id, Name FROM Opportunity WHERE CloseDate = THIS_QUARTER AND OwnerId = CURRENT_USER
 - SELECT Id, Subject FROM Task WHERE ActivityDate = TODAY AND OwnerId = CURRENT_USER

@@ -131,6 +131,7 @@ export const upsert = internalMutation({
               helpText: v.optional(v.string()),
               picklistValues: v.optional(v.array(v.string())),
               referenceTo: v.optional(v.string()),
+              relationshipName: v.optional(v.string()),
             })
           )
         )),
@@ -378,6 +379,9 @@ export const syncFromSalesforce = internalAction({
                 : undefined,
               referenceTo: f.type === "reference" && f.referenceTo?.length > 0
                 ? f.referenceTo[0]
+                : undefined,
+              relationshipName: f.type === "reference" && f.relationshipName
+                ? f.relationshipName
                 : undefined,
             }));
 

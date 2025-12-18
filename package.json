@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@convex-dev/better-auth": "^0.10.4",
-    "better-auth": "1.4.7",
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.90",
     "convex": "^1.31.2",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.562.0",
