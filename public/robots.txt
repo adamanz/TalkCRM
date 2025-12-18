@@ -1,0 +1,9 @@
+# TalkCRM Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://talkcrm.app/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1

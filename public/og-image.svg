@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="50%" style="stop-color:#1E3A5F"/>
+      <stop offset="100%" style="stop-color:#312E81"/>
+    </linearGradient>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6"/>
+      <stop offset="100%" style="stop-color:#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+
+  <!-- Decorative circles -->
+  <circle cx="1100" cy="100" r="200" fill="#3B82F6" opacity="0.1"/>
+  <circle cx="100" cy="530" r="150" fill="#8B5CF6" opacity="0.1"/>
+
+  <!-- Logo icon -->
+  <rect x="100" y="200" width="80" height="80" rx="16" fill="url(#logoGrad)"/>
+  <path d="M123 215c-2.2 0-4 1.8-4 4v42c0 2.2 1.8 4 4 4h34c2.2 0 4-1.8 4-4v-42c0-2.2-1.8-4-4-4h-34zm17 52c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4zm12-16h-24v-24h24v24z" fill="white"/>
+
+  <!-- Title -->
+  <text x="200" y="260" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="700" fill="white">TalkCRM</text>
+
+  <!-- Tagline -->
+  <text x="100" y="350" font-family="system-ui, -apple-system, sans-serif" font-size="36" fill="#94A3B8">AI-Powered Voice &amp; SMS for Salesforce</text>
+
+  <!-- Features -->
+  <text x="100" y="450" font-family="system-ui, -apple-system, sans-serif" font-size="24" fill="#64748B">
+    <tspan fill="#3B82F6">&#x2713;</tspan> Voice Calls
+    <tspan dx="40" fill="#3B82F6">&#x2713;</tspan> SMS Automation
+    <tspan dx="40" fill="#3B82F6">&#x2713;</tspan> Salesforce Sync
+  </text>
+
+  <!-- CTA -->
+  <rect x="100" y="500" width="200" height="50" rx="8" fill="#3B82F6"/>
+  <text x="200" y="533" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="white" text-anchor="middle">Try Free Beta</text>
+
+  <!-- URL -->
+  <text x="1100" y="590" font-family="system-ui, -apple-system, sans-serif" font-size="24" fill="#64748B" text-anchor="end">talkcrm.app</text>
+</svg>
