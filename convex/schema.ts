@@ -362,4 +362,102 @@ export default defineSchema({
     .index("by_session", ["sessionId"])
     .index("by_user", ["userId"])
     .index("by_timestamp", ["timestamp"]),
+
+  // ============================================================================
+  // SLACK INTEGRATION
+  // ============================================================================
+
+  // Store Slack app installations per user/team
+  slackInstallations: defineTable({
+    userId: v.id("users"),               // TalkCRM user who installed
+    teamId: v.string(),                  // Slack workspace ID
+    teamName: v.string(),                // Slack workspace name
+    botToken: v.string(),                // xoxb-... token (encrypted in production)
+    botUserId: v.string(),               // Bot's Slack user ID
+    botId: v.string(),                   // Bot ID
+    appId: v.string(),                   // Slack App ID
+    // OAuth response data
+    authedUserId: v.string(),            // Slack user who authorized
+    scope: v.string(),                   // Granted scopes (comma-separated)
+    // Metadata
+    installedAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    isActive: v.boolean(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_team", ["teamId"])
+    .index("by_user_team", ["userId", "teamId"]),
+
+  // Channel configurations - which channels receive which notifications
+  slackChannelMappings: defineTable({
+    userId: v.id("users"),
+    installationId: v.id("slackInstallations"),
+    channelId: v.string(),               // Slack channel ID
+    channelName: v.string(),             // Slack channel name
+    channelType: v.union(v.literal("public"), v.literal("private"), v.literal("dm")),
+    // What notifications this channel receives
+    purpose: v.union(
+      v.literal("deal_alerts"),          // New deal/stage change notifications
+      v.literal("call_summaries"),       // Voice call transcripts & summaries
+      v.literal("task_reminders"),       // Task due notifications
+      v.literal("all_activity"),         // All CRM activity
+      v.literal("general")               // General bot interactions
+    ),
+    // Settings
+    isActive: v.boolean(),
+    notifyOnDealClosed: v.optional(v.boolean()),
+    notifyOnDealStageChange: v.optional(v.boolean()),
+    notifyOnCallComplete: v.optional(v.boolean()),
+    notifyOnTaskOverdue: v.optional(v.boolean()),
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_installation", ["installationId"])
+    .index("by_channel", ["channelId"])
+    .index("by_purpose", ["userId", "purpose"]),
+
+  // Track Slack messages for deduplication and threading
+  slackMessages: defineTable({
+    userId: v.id("users"),
+    installationId: v.id("slackInstallations"),
+    channelId: v.string(),
+    // Slack message identifiers
+    messageTs: v.string(),               // Slack message timestamp (unique ID)
+    threadTs: v.optional(v.string()),    // Parent thread timestamp
+    // Message content
+    direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    messageType: v.union(
+      v.literal("command"),              // Slash command response
+      v.literal("mention"),              // @mention response
+      v.literal("notification"),         // Proactive notification
+      v.literal("interactive")           // Button/action response
+    ),
+    content: v.optional(v.string()),     // Plain text content
+    // Salesforce context
+    salesforceRecordId: v.optional(v.string()),
+    salesforceRecordType: v.optional(v.string()),
+    // AI processing
+    aiProcessed: v.optional(v.boolean()),
+    aiResponse: v.optional(v.string()),
+    // Metadata
+    timestamp: v.number(),
+    slackUserId: v.optional(v.string()), // Who sent it (for inbound)
+  })
+    .index("by_user", ["userId"])
+    .index("by_channel", ["channelId"])
+    .index("by_message_ts", ["channelId", "messageTs"])
+    .index("by_timestamp", ["timestamp"]),
+
+  // Pending OAuth states (for CSRF protection)
+  slackOAuthStates: defineTable({
+    state: v.string(),                   // Random state parameter
+    userId: v.optional(v.id("users")),   // TalkCRM user if logged in
+    returnUrl: v.optional(v.string()),   // Where to redirect after
+    expiresAt: v.number(),               // Auto-expire
+    createdAt: v.number(),
+  })
+    .index("by_state", ["state"])
+    .index("by_expires", ["expiresAt"]),
 });

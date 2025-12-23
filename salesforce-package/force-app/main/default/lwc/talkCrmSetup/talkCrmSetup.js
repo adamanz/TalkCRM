@@ -254,6 +254,17 @@ export default class TalkCrmSetup extends LightningElement {
         }
     }
 
+    // Slack Integration
+    handleConnectSlack() {
+        // Direct Slack OAuth URL
+        const SLACK_CLIENT_ID = '8842412024274.10179828180082';
+        const SLACK_SCOPES = 'app_mentions:read,channels:join,channels:read,chat:write,commands,groups:read,im:history,im:read,im:write,users:read,users:read.email';
+        const REDIRECT_URI = 'https://tough-raccoon-796.convex.site/api/slack/oauth/callback';
+
+        const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${SLACK_SCOPES}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+        window.open(oauthUrl, '_blank');
+    }
+
     // Settings Management
     async handleChangePhone() {
         this.isLoading = true;

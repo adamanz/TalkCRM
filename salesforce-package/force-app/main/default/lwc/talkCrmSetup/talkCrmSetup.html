@@ -206,6 +206,29 @@
                         </ul>
                     </div>
 
+                    <!-- Slack Integration Section -->
+                    <div class="slds-box slds-theme_default slds-m-bottom_large" style="max-width: 500px; margin: 0 auto;">
+                        <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+                            <div class="slds-col">
+                                <h4 class="slds-text-title_bold slds-m-bottom_x-small">
+                                    <lightning-icon icon-name="utility:comments" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                                    Slack Integration
+                                </h4>
+                                <p class="slds-text-body_small slds-text-color_weak">
+                                    Get call summaries and use /crm commands in Slack
+                                </p>
+                            </div>
+                            <div class="slds-col slds-shrink-none">
+                                <lightning-button
+                                    variant="neutral"
+                                    label="Connect Slack"
+                                    onclick={handleConnectSlack}
+                                    icon-name="utility:new_window">
+                                </lightning-button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Manage Settings Section -->
                     <div class="slds-box slds-theme_default" style="max-width: 500px; margin: 0 auto;">
                         <h4 class="slds-text-title_bold slds-m-bottom_medium">

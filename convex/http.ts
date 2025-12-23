@@ -959,6 +959,30 @@ http.route({
         });
       }
 
+      // ============================================================================
+      // SEND SLACK NOTIFICATION (if user has Slack connected)
+      // ============================================================================
+      if (result.userId && summary) {
+        ctx.runAction(internal.slack.notifyCallCompleted, {
+          userId: result.userId,
+          callSummary: summary,
+          durationSeconds: callDurationSecs,
+          callerPhone: callerPhone || undefined,
+          recordsAccessed: 0, // Could be fetched from conversation
+          recordsModified: 0,
+          sentiment: sentiment || undefined,
+          successEvaluation: successEvaluation ? {
+            success: successEvaluation.success,
+            criteria: successEvaluation.criteriaResults?.map((c: any) => ({
+              name: c.name,
+              result: c.result,
+            })),
+          } : undefined,
+        }).catch((err: Error) => {
+          console.error("Failed to send Slack call notification:", err);
+        });
+      }
+
       return new Response(JSON.stringify({ status: "received", conversationId }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -2704,6 +2728,563 @@ http.route({
         "Content-Security-Policy": "frame-ancestors *",
       },
     });
+  }),
+});
+
+// ============================================================================
+// SLACK INTEGRATION
+// OAuth, Webhooks, Slash Commands, and Interactive Components
+// ============================================================================
+
+/**
+ * Verify Slack request signature
+ */
+async function verifySlackSignature(
+  signature: string,
+  timestamp: string,
+  body: string
+): Promise<boolean> {
+  const signingSecret = process.env.SLACK_SIGNING_SECRET;
+  if (!signingSecret) {
+    console.error("SLACK_SIGNING_SECRET not configured");
+    return false;
+  }
+
+  // Check timestamp is recent (within 5 minutes)
+  const requestTimestamp = parseInt(timestamp, 10);
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+
+  if (Math.abs(currentTimestamp - requestTimestamp) > 300) {
+    console.error("Slack signature timestamp too old");
+    return false;
+  }
+
+  // Calculate expected signature
+  const sigBasestring = `v0:${timestamp}:${body}`;
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(signingSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signatureBuffer = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(sigBasestring)
+  );
+
+  const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+  const computedSignature = "v0=" + signatureArray
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // Timing-safe comparison
+  if (signature.length !== computedSignature.length) {
+    return false;
+  }
+
+  let result = 0;
+  for (let i = 0; i < signature.length; i++) {
+    result |= signature.charCodeAt(i) ^ computedSignature.charCodeAt(i);
+  }
+
+  return result === 0;
+}
+
+/**
+ * Slack OAuth Callback
+ * GET /api/slack/oauth/callback?code=xxx&state=yyy
+ */
+http.route({
+  path: "/api/slack/oauth/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const error = url.searchParams.get("error");
+
+      if (error) {
+        console.error("Slack OAuth error:", error);
+        return new Response(
+          `<html><body><h1>Slack Connection Failed</h1><p>${error}</p></body></html>`,
+          { status: 400, headers: { "Content-Type": "text/html" } }
+        );
+      }
+
+      if (!code || !state) {
+        return new Response(
+          `<html><body><h1>Missing Parameters</h1><p>Invalid OAuth callback</p></body></html>`,
+          { status: 400, headers: { "Content-Type": "text/html" } }
+        );
+      }
+
+      // Complete the OAuth flow
+      const result = await ctx.runAction(internal.slackAuth.completeOAuthFlow, {
+        code,
+        state,
+      });
+
+      // Redirect to return URL or default success page
+      const returnUrl = result.returnUrl || process.env.TALKCRM_WEB_URL || "/";
+      const successUrl = `${returnUrl}?slack_connected=true&team=${encodeURIComponent(result.teamName)}`;
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: successUrl,
+        },
+      });
+    } catch (error: any) {
+      console.error("Slack OAuth callback error:", error);
+      return new Response(
+        `<html><body><h1>Connection Failed</h1><p>${error.message}</p><p><a href="/">Return to TalkCRM</a></p></body></html>`,
+        { status: 500, headers: { "Content-Type": "text/html" } }
+      );
+    }
+  }),
+});
+
+/**
+ * Slack Events API
+ * POST /webhooks/slack/events
+ * Handles: URL verification, app_mention, message events
+ */
+http.route({
+  path: "/webhooks/slack/events",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const signature = request.headers.get("X-Slack-Signature") || "";
+      const timestamp = request.headers.get("X-Slack-Request-Timestamp") || "";
+
+      // Verify signature
+      const isValid = await verifySlackSignature(signature, timestamp, bodyText);
+      if (!isValid) {
+        console.error("Invalid Slack signature");
+        return new Response("Invalid signature", { status: 401 });
+      }
+
+      const body = JSON.parse(bodyText);
+
+      // Handle URL verification challenge
+      if (body.type === "url_verification") {
+        return new Response(body.challenge, {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+
+      // Handle events
+      if (body.type === "event_callback") {
+        const event = body.event;
+        const teamId = body.team_id;
+
+        // Respond immediately to Slack (they require 3s response)
+        // Then process event async
+        switch (event.type) {
+          case "app_mention":
+            // Don't await - process in background
+            ctx.runAction(internal.slackCommands.handleAppMention, {
+              teamId,
+              channelId: event.channel,
+              userId: event.user,
+              text: event.text,
+              ts: event.ts,
+              threadTs: event.thread_ts,
+            }).catch((e) => console.error("Error handling app_mention:", e));
+            break;
+
+          case "message":
+            // Only handle DMs to the bot
+            if (event.channel_type === "im" && !event.bot_id) {
+              ctx.runAction(internal.slackCommands.handleAppMention, {
+                teamId,
+                channelId: event.channel,
+                userId: event.user,
+                text: event.text,
+                ts: event.ts,
+              }).catch((e) => console.error("Error handling DM:", e));
+            }
+            break;
+        }
+      }
+
+      return new Response("ok", { status: 200 });
+    } catch (error: any) {
+      console.error("Slack events error:", error);
+      return new Response("Error", { status: 500 });
+    }
+  }),
+});
+
+/**
+ * Slack Slash Commands
+ * POST /webhooks/slack/commands
+ * Handles: /crm commands
+ */
+http.route({
+  path: "/webhooks/slack/commands",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const signature = request.headers.get("X-Slack-Signature") || "";
+      const timestamp = request.headers.get("X-Slack-Request-Timestamp") || "";
+
+      // Verify signature
+      const isValid = await verifySlackSignature(signature, timestamp, bodyText);
+      if (!isValid) {
+        console.error("Invalid Slack signature for command");
+        return new Response("Invalid signature", { status: 401 });
+      }
+
+      // Parse URL-encoded body
+      const params = new URLSearchParams(bodyText);
+      const command = {
+        token: params.get("token") || "",
+        teamId: params.get("team_id") || "",
+        teamDomain: params.get("team_domain") || "",
+        channelId: params.get("channel_id") || "",
+        channelName: params.get("channel_name") || "",
+        userId: params.get("user_id") || "",
+        userName: params.get("user_name") || "",
+        command: params.get("command") || "",
+        text: params.get("text") || "",
+        responseUrl: params.get("response_url") || "",
+        triggerId: params.get("trigger_id") || "",
+      };
+
+      // Respond immediately (Slack requires <3s response)
+      // Schedule command processing to run after response
+      await ctx.scheduler.runAfter(0, internal.slackCommands.handleSlashCommand, {
+        teamId: command.teamId,
+        channelId: command.channelId,
+        userId: command.userId,
+        userName: command.userName,
+        command: command.command,
+        text: command.text,
+        responseUrl: command.responseUrl,
+        triggerId: command.triggerId,
+      });
+
+      // Return immediate acknowledgment
+      return new Response(JSON.stringify({
+        response_type: "ephemeral",
+        text: "Processing...",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error: any) {
+      console.error("Slack command error:", error);
+      return new Response(JSON.stringify({
+        response_type: "ephemeral",
+        text: "Sorry, something went wrong.",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+/**
+ * Slack Interactive Components
+ * POST /webhooks/slack/actions
+ * Handles: Button clicks, select menus, modal submissions
+ */
+http.route({
+  path: "/webhooks/slack/actions",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const bodyText = await request.text();
+      const signature = request.headers.get("X-Slack-Signature") || "";
+      const timestamp = request.headers.get("X-Slack-Request-Timestamp") || "";
+
+      // Verify signature
+      const isValid = await verifySlackSignature(signature, timestamp, bodyText);
+      if (!isValid) {
+        console.error("Invalid Slack signature for action");
+        return new Response("Invalid signature", { status: 401 });
+      }
+
+      // Parse URL-encoded body - payload is JSON inside a form field
+      const params = new URLSearchParams(bodyText);
+      const payloadStr = params.get("payload");
+      if (!payloadStr) {
+        return new Response("Missing payload", { status: 400 });
+      }
+
+      const payload = JSON.parse(payloadStr);
+
+      // Handle different action types
+      switch (payload.type) {
+        case "block_actions":
+          // Handle button clicks, select menus, etc.
+          const action = payload.actions?.[0];
+          if (action) {
+            console.log(`Slack action: ${action.action_id} with value: ${action.value}`);
+
+            // Handle specific actions
+            switch (action.action_id) {
+              case "new_search":
+                // Could open a modal for new search
+                break;
+              case "refresh_pipeline":
+              case "refresh_tasks":
+                // Re-run the query and update the message
+                break;
+              case "show_help":
+                // Send help message
+                break;
+              // Add more action handlers as needed
+            }
+          }
+          break;
+
+        case "view_submission":
+          // Handle modal form submissions
+          break;
+
+        case "shortcut":
+          // Handle global/message shortcuts
+          break;
+      }
+
+      // Acknowledge the action
+      return new Response("", { status: 200 });
+    } catch (error: any) {
+      console.error("Slack action error:", error);
+      return new Response("Error", { status: 500 });
+    }
+  }),
+});
+
+/**
+ * Slack Install URL Generator
+ * GET /api/slack/install?email=xxx&returnUrl=yyy
+ */
+http.route({
+  path: "/api/slack/install",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const email = url.searchParams.get("email");
+      const returnUrl = url.searchParams.get("returnUrl");
+
+      // Look up user by email if provided
+      let userId: any = undefined;
+      if (email) {
+        const user = await ctx.runQuery(internal.slackAuth.getUserByEmail, { email });
+        if (user) {
+          userId = user._id;
+        }
+      }
+
+      const installUrl = await ctx.runAction(api.slackAuth.getInstallUrl, {
+        userId,
+        returnUrl: returnUrl || undefined,
+      });
+
+      // Redirect to Slack OAuth
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: installUrl,
+        },
+      });
+    } catch (error: any) {
+      console.error("Slack install error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Slack Status API
+ * GET /api/slack/status?email=xxx
+ */
+http.route({
+  path: "/api/slack/status",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+http.route({
+  path: "/api/slack/status",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const email = url.searchParams.get("email");
+
+      if (!email) {
+        return corsResponse({ error: "email is required" }, 400);
+      }
+
+      // Look up user by email
+      const user = await ctx.runQuery(internal.slackAuth.getUserByEmail, { email });
+      if (!user) {
+        return corsResponse({ connected: false });
+      }
+
+      const status = await ctx.runQuery(api.slack.getSlackStatus, {
+        userId: user._id,
+      });
+
+      return corsResponse(status);
+    } catch (error: any) {
+      console.error("Slack status error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Slack Channels API
+ * GET /api/slack/channels?email=xxx - Get channels and mappings
+ * POST /api/slack/channels - Set/remove channel mapping
+ */
+http.route({
+  path: "/api/slack/channels",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+http.route({
+  path: "/api/slack/channels",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const url = new URL(request.url);
+      const email = url.searchParams.get("email");
+
+      if (!email) {
+        return corsResponse({ error: "email is required" }, 400);
+      }
+
+      // Look up user by email
+      const user = await ctx.runQuery(internal.slackAuth.getUserByEmail, { email });
+      if (!user) {
+        return corsResponse({ channels: [], mappings: [] });
+      }
+
+      // Get channels from Slack
+      const channels = await ctx.runAction(api.slack.getChannels, {
+        userId: user._id,
+      });
+
+      // Get existing channel mappings
+      const mappings = await ctx.runQuery(api.slack.getChannelMappings, {
+        userId: user._id,
+      });
+
+      return corsResponse({ channels, mappings });
+    } catch (error: any) {
+      console.error("Get Slack channels error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+http.route({
+  path: "/api/slack/channels",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { email, action, purpose, channelId, channelName } = body;
+
+      if (!email) {
+        return corsResponse({ error: "email is required" }, 400);
+      }
+
+      // Look up user by email
+      const user = await ctx.runQuery(internal.slackAuth.getUserByEmail, { email });
+      if (!user) {
+        return corsResponse({ error: "User not found" }, 404);
+      }
+
+      // Get installation
+      const installation = await ctx.runQuery(internal.slack.getInstallationForUser, {
+        userId: user._id,
+      });
+      if (!installation) {
+        return corsResponse({ error: "No Slack connection" }, 400);
+      }
+
+      if (action === "remove") {
+        // Remove channel mapping
+        await ctx.runMutation(internal.slack.removeChannelMappingByPurpose, {
+          userId: user._id,
+          purpose,
+        });
+      } else {
+        // Set channel mapping
+        await ctx.runMutation(api.slack.saveChannelMapping, {
+          userId: user._id,
+          installationId: installation._id,
+          channelId,
+          channelName,
+          channelType: "public",
+          purpose,
+        });
+      }
+
+      return corsResponse({ success: true });
+    } catch (error: any) {
+      console.error("Save Slack channel error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
+  }),
+});
+
+/**
+ * Slack Disconnect API
+ * POST /api/slack/disconnect { email: string }
+ */
+http.route({
+  path: "/api/slack/disconnect",
+  method: "OPTIONS",
+  handler: httpAction(async () => corsOptionsResponse()),
+});
+
+http.route({
+  path: "/api/slack/disconnect",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const { email } = body;
+
+      if (!email) {
+        return corsResponse({ error: "email is required" }, 400);
+      }
+
+      // Look up user by email
+      const user = await ctx.runQuery(internal.slackAuth.getUserByEmail, { email });
+      if (!user) {
+        return corsResponse({ error: "User not found" }, 404);
+      }
+
+      const result = await ctx.runAction(api.slackAuth.disconnectSlack, {
+        userId: user._id,
+      });
+
+      return corsResponse(result);
+    } catch (error: any) {
+      console.error("Slack disconnect error:", error);
+      return corsResponse({ error: error.message }, 500);
+    }
   }),
 });
 
